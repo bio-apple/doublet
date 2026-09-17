@@ -1,6 +1,16 @@
 # RNA-only Doublet Rate Analysis
 
-This context is computational, RNA-only analysis of doublets in scRNA-seq: score every cell, make a data-driven call, and report a predicted rate. It does not remove cells.
+This file is the **glossary** for this repository. It defines the words used in the README, the run contract, and the decision log. It is not a user guide, not a command list, and not a place for software parameters.
+
+| Need | File |
+|---|---|
+| How to run | [README.md](README.md), [SKILL.md](SKILL.md) |
+| Parameters, I/O, failures, citations | [reference.md](reference.md) |
+| Why a rule exists | [docs/adr/](docs/adr/) |
+
+## How the terms connect
+
+A **Sample** is one capture of already cell-called RNA counts. Each **Detector** emits a **Doublet Score** for every cell. A data-driven threshold turns that Score into a **Doublet Call**. The **Predicted Doublet Rate** is `n_doublet / n_called` for that Detector. Detectors are not fused. **Expected Doublet Rate** is not used to make a Call. **Removal** of cells is out of scope.
 
 ## Language
 
@@ -9,7 +19,7 @@ An artifactual library generated from two cells captured together.
 _Avoid_: Multiplet (that includes three or more cells)
 
 **Sample**:
-One droplet capture of already cell-called RNA counts, provided as a 10x MTX directory, a 10x `*.h5`, or a single-sample h5ad. The analysis unit is exactly one Sample.
+One droplet capture of already cell-called RNA counts. On disk: a 10x MTX directory, a 10x `*.h5`, or a single-sample h5ad. In memory: AnnData, Seurat, or SingleCellExperiment carrying that same count matrix.
 _Avoid_: Merged object, integrated object, batch as a synonym, empty droplets, csv/tsv expression tables
 
 **Detector**:

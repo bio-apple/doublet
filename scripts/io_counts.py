@@ -91,6 +91,37 @@ def sanitize_sparse_indices(X):
     )
 
 
+def as_counts_adata(adata):
+    """Working AnnData of raw counts. Does not replace the caller's ``.X``.
+
+    Counts come from ``layers['counts']`` when present, else ``.X``.
+    Embeddings in ``obsm`` are not scored.
+    """
+    import anndata as ad
+
+    if adata.n_obs == 0 or adata.n_vars == 0:
+        raise InputError("empty matrix")
+    if not adata.obs_names.is_unique:
+        raise InputError("obs_names must be unique barcodes")
+    assert_single_sample(adata)
+    if "counts" in getattr(adata, "layers", {}):
+        X = adata.layers["counts"]
+    else:
+        X = adata.X
+    if X is None:
+        raise InputError("no count matrix: set layers['counts'] or .X")
+    if sparse.issparse(X):
+        X = sanitize_sparse_indices(X)
+    else:
+        X = np.asarray(X)
+    assert_raw_counts(X)
+    out = ad.AnnData(X=X, obs=adata.obs.copy(), var=adata.var.copy())
+    out.obs.index = np.asarray(adata.obs_names, dtype=str)
+    out.var.index = np.asarray(adata.var_names, dtype=str)
+    out.var_names_make_unique()
+    return out
+
+
 def load_sample(path: str | Path):
     import scanpy as sc
 

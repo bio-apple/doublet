@@ -1,6 +1,25 @@
 # RNA-only doublet rate — reference
 
-Companion to `SKILL.md`. The agent runs `scripts/run_doublet_rate.py`; this file records parameters, failure modes, and sources.
+This file is the **parameter and source notebook**. Use it when you need the exact Call rule, a legal input, a skip reason, or a citation. It is not the glossary and not the run contract.
+
+| Need | File |
+|---|---|
+| Words (Sample, Detector, Score, Call, rate) | [CONTEXT.md](CONTEXT.md) |
+| What to execute and what not to do | [SKILL.md](SKILL.md) |
+| Why a rule exists | [docs/adr/](docs/adr/) |
+| Quick Start | [README.md](README.md) |
+
+The runnable entrypoint is `scripts/run_doublet_rate.py`. Scanpy: `detect_doublets(adata)` in `scripts/annotate.py`. R: `annotate_doublets(x)` in `scripts/annotate_object.R`.
+
+## Contents
+
+1. [Forbidden inputs](#forbidden-inputs) — Expected Doublet Rate must not place a Call
+2. [Call rules](#call-rules) — native threshold, then Griffiths/MAD
+3. [Detector notes](#detector-notes) — score field, ecosystem, size gate
+4. [I/O](#io) — accepted objects, rejected matrices, output tables
+5. [Runtime](#runtime) — mixed R/Python, `--n-jobs`, seeds
+6. [Failure modes](#failure-modes)
+7. [Sources](#sources)
 
 ## Forbidden inputs
 
@@ -19,6 +38,8 @@ scDblFinder still estimates a default `dbr` internally if omitted. `dbr.sd=1` di
 
 DoubletFinder is called with `nExp=1` only because the function requires the argument. The classification column is discarded.
 
+See [ADR 0002](docs/adr/0002-no-expected-rate-for-calls.md).
+
 ## Call rules
 
 **Native, no Expected Doublet Rate**
@@ -31,6 +52,8 @@ DoubletFinder is called with `nExp=1` only because the function requires the arg
 On that Detector's Score, `log1p`, median + 3 MAD (constant 1.4826), high tail = doublet. Same idea as OSCA converting doublet densities with `doubletThresholding(..., method="griffiths")` / Pijuan-Sala et al. 2019 large outliers. Applied to cxds, bcds, hybrid, DoubletFinder pANN, DoubletDetection scores, and Solo soft doublet scores.
 
 Do not use DoubletDetection `predict(p_thresh=..., voter_thresh=...)` — those are global defaults, not a per-Sample score-distribution rule.
+
+See [ADR 0006](docs/adr/0006-native-then-mad-calls.md).
 
 ## Detector notes
 
@@ -46,7 +69,7 @@ Do not use DoubletDetection `predict(p_thresh=..., voter_thresh=...)` — those 
 | Solo | Python / scvi-tools | soft `doublet` probability, uncalibrated | Train per Sample on CUDA or MPS if present, else CPU. Skip if n>20,000 (Demuxafy: median ~13 h at ~20k) |
 | DoubletDecon | — | — | Not run: binary output, no Score (Xi and Li 2021) |
 
-Size gate: `n_input > 20000`.
+Size gate: `n_input > 20000`. See [ADR 0005](docs/adr/0005-detector-roster-and-size-gate.md).
 
 ## I/O
 
@@ -55,6 +78,7 @@ Size gate: `n_input > 20000`.
 - 10x MTX directory
 - 10x `filtered_feature_bc_matrix.h5` (`gex_only=True`)
 - h5ad with raw counts in `layers['counts']` or `.X`
+- in-memory AnnData (`detect_doublets`); Seurat or SingleCellExperiment (`annotate_doublets`)
 
 **Reject**
 
@@ -62,6 +86,7 @@ Size gate: `n_input > 20000`.
 - negative or clearly non-integer expression
 - `obs` sample/batch columns with more than one value
 - empty matrices
+- scoring `obsm` embeddings (PCA/UMAP) as if they were counts
 
 **Outputs**
 
@@ -69,15 +94,23 @@ Cell table: all input barcodes. Missing Detector values stay empty.
 
 Sample table: one row per Detector in the roster, including skips.
 
-`predicted_doublet_rate = n_doublet / n_called` (ADR 0011). Report `n_input`, `n_scored`, `n_called` so the fraction is auditable.
+On AnnData / Seurat / SCE, per-Detector `{name}_score` and `{name}_call` are written onto the object. Scanpy-style `doublet_score` and `predicted_doublet` are copies of one Detector (`primary`, default scDblFinder), not a consensus. `predicted_doublet` is TRUE/FALSE/NA; empty Call is NA so it is not counted as a singlet ([ADR 0011](docs/adr/0011-rate-denominator-is-n-called.md)). `is_doublet` is the same boolean. Cells are not subsetted.
 
-A Detector crash writes `{detector}.skip.txt` and continues (ADR 0009).
+`--write-h5ad` writes `{stem}.doublet.h5ad` from the CLI.
+
+`predicted_doublet_rate = n_doublet / n_called` ([ADR 0011](docs/adr/0011-rate-denominator-is-n-called.md)). Report `n_input`, `n_scored`, `n_called` so the fraction is auditable.
+
+A Detector crash writes `{detector}.skip.txt` and continues ([ADR 0009](docs/adr/0009-continue-on-detector-failure.md)).
+
+See [ADR 0003](docs/adr/0003-single-sample-matrix-or-h5ad.md) for the Sample unit.
 
 ## Runtime
 
-Mixed R + Python (ADR 0008). The driver exports gene-by-cell Matrix Market for R, runs `detectors_r.R` and the Python Detectors, then joins on barcode.
+Mixed R + Python ([ADR 0008](docs/adr/0008-mixed-r-python.md)). The driver exports gene-by-cell Matrix Market for R, runs `detectors_r.R` and the Python Detectors, then joins on barcode.
 
-Seeds: Python `random_state=0`, R `set.seed(0)`.
+`--n-jobs` (default `-1` = all CPUs) wires existing Detector knobs: scDblFinder `BPPARAM` (`MulticoreParam` / `SnowParam` / `SerialParam`), DoubletFinder `paramSweep(..., num.cores)`, Scrublet sklearn `NearestNeighbors(n_jobs=...)`, DoubletDetection `BoostClassifier(n_jobs=...)`. Solo training is unchanged.
+
+`--random-state` (default `42`) is applied before each Detector so PCA, neighbor graphs, sampling, and classifiers share one seed: Python `random` / NumPy / Torch, Scrublet `random_state`, DoubletDetection `random_state`, scvi `settings.seed`; R `set.seed` before scDblFinder and scds, Seurat `RunPCA(seed.use=)`, DoubletFinder `paramSweep` / `doubletFinder`. The value is stored on AnnData as `uns['doublet_random_state']`.
 
 ## Failure modes
 

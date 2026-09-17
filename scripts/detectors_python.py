@@ -27,6 +27,38 @@ def _skip(outdir: Path, name: str, reason: str) -> None:
     (outdir / f"{name}.skip.txt").write_text(reason + "\n")
 
 
+DEFAULT_RANDOM_STATE = 42
+
+
+def seed_everything(random_state: int = DEFAULT_RANDOM_STATE) -> int:
+    """Seed Python, NumPy, and Torch so PCA / neighbors / sampling / classifiers agree."""
+    import random
+
+    seed = int(random_state)
+    random.seed(seed)
+    np.random.seed(seed)
+    try:
+        import torch
+
+        torch.manual_seed(seed)
+        cuda = getattr(torch, "cuda", None)
+        if cuda is not None and cuda.is_available():
+            cuda.manual_seed_all(seed)
+    except ImportError:
+        pass
+    return seed
+
+
+def resolve_n_jobs(n_jobs: int = -1) -> int:
+    """Positive worker count. ``-1`` / ``None`` → all CPUs (sklearn/joblib convention)."""
+    import os
+
+    cpus = os.cpu_count() or 1
+    if n_jobs is None or n_jobs < 0:
+        return max(1, cpus)
+    return max(1, int(n_jobs))
+
+
 def _torch_accelerator() -> str:
     """scvi ``auto`` still maps MPS to CPU; CUDA/MPS must be requested explicitly."""
     import torch
@@ -39,8 +71,10 @@ def _torch_accelerator() -> str:
     return "cpu"
 
 
-def run_scrublet(adata, outdir: Path, seed: int = 0) -> None:
+def run_scrublet(adata, outdir: Path, random_state: int = DEFAULT_RANDOM_STATE, n_jobs: int = -1) -> None:
     name = "scrublet"
+    n_jobs = resolve_n_jobs(n_jobs)
+    random_state = seed_everything(random_state)
     try:
         import scrublet as scr
     except ImportError:
@@ -49,8 +83,20 @@ def run_scrublet(adata, outdir: Path, seed: int = 0) -> None:
     try:
         counts = _counts_csr(adata)
         # expected_doublet_rate is a constructor default; it is not used to place the Call.
-        scrub = scr.Scrublet(counts, random_state=seed)
-        scores, pred = scrub.scrub_doublets(verbose=False)
+        import scrublet.helper_functions as hf
+
+        orig_nn = hf.NearestNeighbors
+
+        def _nn(*args, **kwargs):
+            kwargs.setdefault("n_jobs", n_jobs)
+            return orig_nn(*args, **kwargs)
+
+        hf.NearestNeighbors = _nn
+        try:
+            scrub = scr.Scrublet(counts, random_state=random_state)
+            scores, pred = scrub.scrub_doublets(verbose=False)
+        finally:
+            hf.NearestNeighbors = orig_nn
         native = None
         if pred is not None:
             native = np.where(pred, "doublet", "singlet")
@@ -59,8 +105,10 @@ def run_scrublet(adata, outdir: Path, seed: int = 0) -> None:
         _skip(outdir, name, f"error:{exc}")
 
 
-def run_doubletdetection(adata, outdir: Path, seed: int = 0) -> None:
+def run_doubletdetection(adata, outdir: Path, random_state: int = DEFAULT_RANDOM_STATE, n_jobs: int = -1) -> None:
     name = "doubletdetection"
+    n_jobs = resolve_n_jobs(n_jobs)
+    random_state = seed_everything(random_state)
     try:
         import doubletdetection
     except ImportError:
@@ -72,8 +120,8 @@ def run_doubletdetection(adata, outdir: Path, seed: int = 0) -> None:
             n_iters=10,
             clustering_algorithm="leiden",
             standard_scaling=True,
-            random_state=seed,
-            n_jobs=1,
+            random_state=random_state,
+            n_jobs=n_jobs,
             verbose=False,
         )
         clf.fit(counts)
@@ -83,7 +131,7 @@ def run_doubletdetection(adata, outdir: Path, seed: int = 0) -> None:
         _skip(outdir, name, f"error:{exc}")
 
 
-def run_solo(adata, outdir: Path, seed: int = 0) -> None:
+def run_solo(adata, outdir: Path, random_state: int = DEFAULT_RANDOM_STATE) -> None:
     name = "solo"
     try:
         import scvi
@@ -97,7 +145,8 @@ def run_solo(adata, outdir: Path, seed: int = 0) -> None:
         ad = adata.copy()
         if not sparse.issparse(ad.X):
             ad.X = sparse.csr_matrix(np.asarray(ad.X))
-        scvi.settings.seed = seed
+        seed_everything(random_state)
+        scvi.settings.seed = int(random_state)
         SCVI.setup_anndata(ad)
         vae = SCVI(ad)
         accelerator = _torch_accelerator()

@@ -61,52 +61,60 @@ def apply_calls(df: pd.DataFrame, name: str) -> tuple[pd.DataFrame, str]:
     return df, "mad-griffiths"
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", help="10x MTX directory, 10x .h5, or single-sample .h5ad")
-    parser.add_argument("--output-dir", default=None, help="directory for TSV outputs (default: beside input)")
-    parser.add_argument(
-        "--fast",
-        action="store_true",
-        help="skip DoubletDetection, DoubletFinder, and Solo (smoke test / Quick Start)",
+def score_adata(
+    adata,
+    out_dir: Path,
+    *,
+    stem: str,
+    fast: bool = False,
+    n_jobs: int = -1,
+    random_state: int = 42,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Run Detectors on an in-memory counts AnnData; write cell/sample TSVs."""
+    from detectors_python import (
+        DEFAULT_RANDOM_STATE,
+        resolve_n_jobs,
+        run_doubletdetection,
+        run_scrublet,
+        run_solo,
+        seed_everything,
     )
-    args = parser.parse_args()
 
-    in_path = Path(args.input).expanduser().resolve()
-    try:
-        adata = load_sample(in_path)
-    except InputError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-
-    stem = sample_stem(in_path)
-    out_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else in_path.parent
-    if in_path.is_dir() and args.output_dir is None:
-        out_dir = in_path.parent
+    out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-
+    n_jobs = resolve_n_jobs(n_jobs)
+    random_state = seed_everything(random_state if random_state is not None else DEFAULT_RANDOM_STATE)
     n_input = int(adata.n_obs)
     barcodes = pd.Index(adata.obs_names.astype(str), name="barcode")
-    run_gated = n_input <= SIZE_GATE and not args.fast
-    gated_skip = "fast:skip_gated" if args.fast else f"size_gate:>{SIZE_GATE}"
+    run_gated = n_input <= SIZE_GATE and not fast
+    gated_skip = "fast:skip_gated" if fast else f"size_gate:>{SIZE_GATE}"
 
     work = out_dir / f".{stem}_doublet_work"
     mtx_dir = export_mtx(adata, work / "mtx")
     det_dir = work / "detectors"
     det_dir.mkdir(parents=True, exist_ok=True)
 
-    from detectors_python import run_doubletdetection, run_scrublet, run_solo
-
-    run_scrublet(adata, det_dir)
+    run_scrublet(adata, det_dir, random_state=random_state, n_jobs=n_jobs)
     if run_gated:
-        run_doubletdetection(adata, det_dir)
-        run_solo(adata, det_dir)
+        run_doubletdetection(adata, det_dir, random_state=random_state, n_jobs=n_jobs)
+        run_solo(adata, det_dir, random_state=random_state)
     else:
         for name in ("doubletdetection", "solo"):
             (det_dir / f"{name}.skip.txt").write_text(gated_skip + "\n")
 
     rscript = ROOT / "detectors_r.R"
-    r_cmd = ["Rscript", str(rscript), "--mtx-dir", str(mtx_dir), "--outdir", str(det_dir)]
+    r_cmd = [
+        "Rscript",
+        str(rscript),
+        "--mtx-dir",
+        str(mtx_dir),
+        "--outdir",
+        str(det_dir),
+        "--n-jobs",
+        str(n_jobs),
+        "--random-state",
+        str(random_state),
+    ]
     if run_gated:
         r_cmd.append("--doubletfinder")
     else:
@@ -164,12 +172,77 @@ def main() -> int:
         rows.append(rec)
 
     sample = pd.DataFrame(rows)
+    cell.to_csv(out_dir / f"{stem}.doublet_cells.tsv", sep="\t", index=False)
+    sample.to_csv(out_dir / f"{stem}.doublet_sample.tsv", sep="\t", index=False)
+    return cell, sample
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input", help="10x MTX directory, 10x .h5, or single-sample .h5ad")
+    parser.add_argument("--output-dir", default=None, help="directory for TSV outputs (default: beside input)")
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="skip DoubletDetection, DoubletFinder, and Solo (smoke test / Quick Start)",
+    )
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=-1,
+        help="workers for artificial-doublet / KNN steps (-1 = all CPUs)",
+    )
+    parser.add_argument(
+        "--random-state",
+        type=int,
+        default=42,
+        help="seed for PCA, neighbor graphs, sampling, and classifiers (default: 42)",
+    )
+    parser.add_argument(
+        "--write-h5ad",
+        action="store_true",
+        help="write annotated AnnData ({stem}.doublet.h5ad) with obs doublet_score / predicted_doublet",
+    )
+    parser.add_argument(
+        "--primary",
+        default="scdblfinder",
+        help="Detector copied to obs['doublet_score'] and obs['predicted_doublet'] (not a consensus)",
+    )
+    args = parser.parse_args()
+
+    in_path = Path(args.input).expanduser().resolve()
+    try:
+        adata = load_sample(in_path)
+    except InputError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    stem = sample_stem(in_path)
+    out_dir = Path(args.output_dir).expanduser().resolve() if args.output_dir else in_path.parent
+    if in_path.is_dir() and args.output_dir is None:
+        out_dir = in_path.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    cell, sample = score_adata(
+        adata,
+        out_dir,
+        stem=stem,
+        fast=args.fast,
+        n_jobs=args.n_jobs,
+        random_state=args.random_state,
+    )
     cells_path = out_dir / f"{stem}.doublet_cells.tsv"
     sample_path = out_dir / f"{stem}.doublet_sample.tsv"
-    cell.to_csv(cells_path, sep="\t", index=False)
-    sample.to_csv(sample_path, sep="\t", index=False)
     print(cells_path)
     print(sample_path)
+    if args.write_h5ad:
+        from annotate import attach_obs
+
+        attach_obs(adata, cell, sample, primary=args.primary)
+        adata.uns["doublet_random_state"] = int(args.random_state)
+        h5ad_path = out_dir / f"{stem}.doublet.h5ad"
+        adata.write_h5ad(h5ad_path)
+        print(h5ad_path)
     return 0
 
 
