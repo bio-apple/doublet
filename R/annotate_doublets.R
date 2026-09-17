@@ -149,16 +149,13 @@ attach_doublet_columns <- function(x, cells, sample, primary = "scdblfinder") {
   x
 }
 
-run_python_cli <- function(mtx_dir, output_dir, fast, n_jobs, random_state, python) {
+run_python_cli <- function(mtx_dir, output_dir, n_jobs, random_state, python) {
   args <- c(
     "-m", "doublet_rate", mtx_dir,
     "--output-dir", output_dir,
     "--n-jobs", as.character(n_jobs),
     "--random-state", as.character(as.integer(random_state))
   )
-  if (isTRUE(fast)) {
-    args <- c(args, "--fast")
-  }
   py_root <- repo_root()
   old <- Sys.getenv("PYTHONPATH", unset = NA_character_)
   if (dir.exists(file.path(py_root, "doublet_rate"))) {
@@ -181,7 +178,6 @@ run_python_cli <- function(mtx_dir, output_dir, fast, n_jobs, random_state, pyth
 #'
 #' @param x A Seurat or SingleCellExperiment object with raw counts.
 #' @param output_dir Optional directory for TSV side outputs. Default is a tempfile.
-#' @param fast Skip DoubletDetection, DoubletFinder, and Solo (\code{fast:skip_gated}).
 #' @param n_jobs Worker count (\code{-1} = all CPUs).
 #' @param random_state Seed for PCA, neighbors, sampling, and classifiers.
 #' @param primary Detector copied to \code{doublet_score} / \code{predicted_doublet} /
@@ -193,7 +189,6 @@ run_python_cli <- function(mtx_dir, output_dir, fast, n_jobs, random_state, pyth
 annotate_doublets <- function(
     x,
     output_dir = NULL,
-    fast = FALSE,
     n_jobs = -1L,
     random_state = 42L,
     primary = "scdblfinder",
@@ -207,7 +202,7 @@ annotate_doublets <- function(
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   mtx_dir <- file.path(output_dir, "sample")
   write_counts_mtx(mat, mtx_dir)
-  st <- run_python_cli(mtx_dir, output_dir, fast, n_jobs, random_state, python)
+  st <- run_python_cli(mtx_dir, output_dir, n_jobs, random_state, python)
   if (!is.null(attr(st, "status")) && attr(st, "status") != 0) {
     stop(paste(c("python -m doublet_rate failed:", st), collapse = "\n"))
   }

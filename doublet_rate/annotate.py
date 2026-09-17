@@ -67,7 +67,6 @@ def detect_doublets(
     adata,
     *,
     output_dir: str | Path | None = None,
-    fast: bool = False,
     n_jobs: int = -1,
     random_state: int = 42,
     primary: str = "scdblfinder",
@@ -101,7 +100,7 @@ def detect_doublets(
         out_dir = Path(output_dir).expanduser().resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
     cell, sample = score_adata(
-        work, out_dir, stem=stem, fast=fast, n_jobs=n_jobs, random_state=random_state
+        work, out_dir, stem=stem, n_jobs=n_jobs, random_state=random_state
     )
     attach_obs(target, cell, sample, primary=primary)
     target.uns["doublet_random_state"] = int(random_state)

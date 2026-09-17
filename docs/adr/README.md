@@ -18,11 +18,11 @@ Each file is one paragraph: context, decision, why. Status is accepted unless a 
 | [0002](0002-no-expected-rate-for-calls.md) | Do not use Expected Doublet Rate (`nExp`, `dbr`, 10x loading formula, Solo calibration) to place a Call. |
 | [0003](0003-single-sample-matrix-or-h5ad.md) | One already cell-called RNA Sample per run (10x MTX / h5 / h5ad, or the same counts in AnnData, Seurat, or SingleCellExperiment). |
 | [0004](0004-parallel-methods-no-fusion.md) | Report each Detector side by side. Do not fuse Calls into a consensus. |
-| [0005](0005-detector-roster-and-size-gate.md) | Roster of score-capable methods; skip DoubletDecon; size-gate (and `--fast`-skip) DoubletDetection, DoubletFinder, and Solo. |
+| [0005](0005-detector-roster-and-size-gate.md) | Roster of score-capable methods; skip DoubletDecon; size-gate DoubletDetection, DoubletFinder, and Solo at 20,000 cells. |
 | [0006](0006-native-then-mad-calls.md) | Native data-driven threshold when it exists (Scrublet, scDblFinder `dbr.sd=1`); otherwise Griffiths/MAD. Never top-x% of Scores. |
 | [0007](0007-no-qc-clustering-integration.md) | Do not QC, cluster, annotate, or integrate. The Sample is already cell-called raw counts. |
 | [0008](0008-mixed-r-python.md) | Run R and Python Detectors in their native languages and join on barcode. Python `doublet_rate` orchestrates. |
-| [0009](0009-continue-on-detector-failure.md) | One Detector failing does not abort the Sample; it is recorded as skipped. |
+| [0009](0009-continue-on-detector-failure.md) | One Detector failing does not abort the Sample; crashes are `failed`, expected absences are `skipped` / `skipped:no_gpu`. |
 | [0010](0010-scripts-enforce-call-rules.md) | Do not reimplement Detector calls in a one-off notebook. Superseded in part by 0013: contract is the packages; `scripts/` are shims. |
 | [0011](0011-rate-denominator-is-n-called.md) | Predicted Doublet Rate = `n_doublet / n_called`. Empty Calls are not singlets. |
 | [0012](0012-primary-detector-scanpy-columns.md) | `doublet_score` / `predicted_doublet` / `is_doublet` copy one Primary Detector (default scDblFinder), not a consensus. |

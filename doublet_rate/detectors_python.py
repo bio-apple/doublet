@@ -59,16 +59,18 @@ def resolve_n_jobs(n_jobs: int = -1) -> int:
     return max(1, int(n_jobs))
 
 
-def _torch_accelerator() -> str:
-    """scvi ``auto`` still maps MPS to CPU; CUDA/MPS must be requested explicitly."""
-    import torch
-
+def _torch_accelerator() -> str | None:
+    """CUDA (``gpu``) or Apple MPS. ``None`` if neither is present — Solo does not train on CPU."""
+    try:
+        import torch
+    except ImportError:
+        return None
     if torch.cuda.is_available():
         return "gpu"
     mps = getattr(torch.backends, "mps", None)
     if mps is not None and mps.is_available():
         return "mps"
-    return "cpu"
+    return None
 
 
 def run_scrublet(adata, outdir: Path, random_state: int = DEFAULT_RANDOM_STATE, n_jobs: int = -1) -> None:
@@ -138,6 +140,10 @@ def run_solo(adata, outdir: Path, random_state: int = DEFAULT_RANDOM_STATE) -> N
     except ImportError:
         _skip(outdir, name, "missing_package:scvi-tools")
         return
+    accelerator = _torch_accelerator()
+    if accelerator is None:
+        _skip(outdir, name, "no_gpu")
+        return
     try:
         from scvi.external import SOLO
         from scvi.model import SCVI
@@ -149,7 +155,6 @@ def run_solo(adata, outdir: Path, random_state: int = DEFAULT_RANDOM_STATE) -> N
         scvi.settings.seed = int(random_state)
         SCVI.setup_anndata(ad)
         vae = SCVI(ad)
-        accelerator = _torch_accelerator()
         vae.train(accelerator=accelerator)
         solo = SOLO.from_scvi_model(vae)
         solo.train(accelerator=accelerator)

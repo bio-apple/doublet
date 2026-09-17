@@ -50,9 +50,19 @@ NATIVE = {
 
 def _read_skip(det_dir: Path, name: str) -> str | None:
     p = det_dir / f"{name}.skip.txt"
-    if p.exists():
-        return p.read_text().strip()
-    return None
+    if not p.exists():
+        return None
+    return p.read_text().strip() or "error:empty skip file"
+
+
+def status_from_skip(reason: str) -> str:
+    """Sample-table status: expected skip vs crash."""
+    r = (reason or "").strip()
+    if r == "no_gpu" or r.startswith("no_gpu"):
+        return "skipped:no_gpu"
+    if r.startswith("error:"):
+        return "failed"
+    return "skipped"
 
 
 def _read_detector(det_dir: Path, name: str) -> pd.DataFrame | None:
@@ -84,7 +94,6 @@ def score_adata(
     out_dir: Path,
     *,
     stem: str,
-    fast: bool = False,
     n_jobs: int = -1,
     random_state: int = 42,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -104,8 +113,8 @@ def score_adata(
     random_state = seed_everything(random_state if random_state is not None else DEFAULT_RANDOM_STATE)
     n_input = int(adata.n_obs)
     barcodes = pd.Index(adata.obs_names.astype(str), name="barcode")
-    run_gated = n_input <= SIZE_GATE and not fast
-    gated_skip = "fast:skip_gated" if fast else f"size_gate:>{SIZE_GATE}"
+    run_gated = n_input <= SIZE_GATE
+    gated_skip = f"size_gate:>{SIZE_GATE}"
 
     work = out_dir / f".{stem}_doublet_work"
     mtx_dir = export_mtx(adata, work / "mtx")
@@ -168,14 +177,17 @@ def score_adata(
         }
         if name in GATED and not run_gated:
             rec["skipped_reason"] = gated_skip
+            rec["status"] = status_from_skip(gated_skip)
             rows.append(rec)
             continue
         if skip and det is None:
             rec["skipped_reason"] = skip
+            rec["status"] = status_from_skip(skip)
             rows.append(rec)
             continue
         if det is None:
             rec["skipped_reason"] = skip or "error:no detector output"
+            rec["status"] = status_from_skip(rec["skipped_reason"])
             rows.append(rec)
             continue
         det, rule = apply_calls(det, name)
@@ -208,11 +220,6 @@ def main() -> int:
         help="print the Detector roster (always / gated) and exit",
     )
     parser.add_argument("--output-dir", default=None, help="directory for TSV outputs (default: beside input)")
-    parser.add_argument(
-        "--fast",
-        action="store_true",
-        help="skip DoubletDetection, DoubletFinder, and Solo (smoke test / Quick Start)",
-    )
     parser.add_argument(
         "--n-jobs",
         type=int,
@@ -259,7 +266,6 @@ def main() -> int:
         adata,
         out_dir,
         stem=stem,
-        fast=args.fast,
         n_jobs=args.n_jobs,
         random_state=args.random_state,
     )

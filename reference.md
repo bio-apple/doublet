@@ -64,12 +64,12 @@ See [ADR 0006](docs/adr/0006-native-then-mad-calls.md).
 | cxds | R / scds | `cxds_score` | Co-expression; no expected rate for scoring (Bais and Kostka 2020) |
 | bcds | R / scds | `bcds_score` | |
 | hybrid | R / scds | `hybrid_score` | Does not support specifying expected rate (Zhang et al. 2024) |
-| DoubletDetection | Python | `BoostClassifier.doublet_score()` | Gated Detector. Skip if n>20,000 (`size_gate:>20000`) or `--fast` (`fast:skip_gated`) (Xi and Li 2021: poor scaling) |
-| DoubletFinder | R | pANN only | Gated Detector. Internal Normalize/Scale/PCA is method machinery, not QC or clustering by this tool. Skip if n>20,000 or `--fast` |
-| Solo | Python / scvi-tools | soft `doublet` probability, uncalibrated | Gated Detector. Train per Sample on CUDA or MPS if present, else CPU. Skip if n>20,000 (Demuxafy: median ~13 h at ~20k) or `--fast` |
+| DoubletDetection | Python | `BoostClassifier.doublet_score()` | Gated Detector. Skip if n>20,000 (`size_gate:>20000`) (Xi and Li 2021: poor scaling) |
+| DoubletFinder | R | pANN only | Gated Detector. Internal Normalize/Scale/PCA is method machinery, not QC or clustering by this tool. Skip if n>20,000 |
+| Solo | Python / scvi-tools | soft `doublet` probability, uncalibrated | Gated Detector. Train per Sample on CUDA (`accelerator=gpu`) or Apple MPS only. Skip if n>20,000 (`size_gate:>20000`). Skip if no GPU (`status=skipped:no_gpu`, `skipped_reason=no_gpu`) — no CPU train. A train/predict crash is `status=failed`. (Demuxafy: median ~13 h at ~20k) |
 | DoubletDecon | — | — | Not run: binary output, no Score (Xi and Li 2021) |
 
-Size gate: `n_input > 20000`. `--fast` skips the same three Gated Detectors regardless of cell count. See [ADR 0005](docs/adr/0005-detector-roster-and-size-gate.md).
+Size gate: `n_input > 20000`. See [ADR 0005](docs/adr/0005-detector-roster-and-size-gate.md).
 
 ## I/O
 
@@ -94,7 +94,7 @@ Size gate: `n_input > 20000`. `--fast` skips the same three Gated Detectors rega
 
 Cell table: all input barcodes. Missing Detector values stay empty.
 
-Sample table: one row per Detector in the roster, including skips. Columns include `status`, `skipped_reason` (`fast:skip_gated`, `size_gate:>20000`, `missing_package:…`, `error:…`), and `call_rule`.
+Sample table: one row per Detector in the roster, including skips. Columns include `status` (`ran`, `skipped`, `skipped:no_gpu`, `failed`), `skipped_reason` (`size_gate:>20000`, `no_gpu`, `missing_package:…`, `error:…`), and `call_rule`.
 
 On AnnData / Seurat / SCE, per-Detector `{name}_score` and `{name}_call` are written onto the object. Convenience columns `doublet_score`, `predicted_doublet`, and `is_doublet` are copies of one Detector (`primary`, default scDblFinder), not a consensus ([ADR 0012](docs/adr/0012-primary-detector-scanpy-columns.md)). If the requested Primary Detector did not run, the first Detector with `status=ran` in roster order is copied. `predicted_doublet` is TRUE/FALSE/NA; empty Call is NA so it is not counted as a singlet ([ADR 0011](docs/adr/0011-rate-denominator-is-n-called.md)). `is_doublet` is the same boolean. The copied Detector name is stored as `uns['doublet_primary']` / Seurat `misc$doublet_primary` / SCE `metadata$doublet_primary`. Cells are not subsetted.
 
@@ -121,11 +121,12 @@ Mixed R + Python ([ADR 0008](docs/adr/0008-mixed-r-python.md), [ADR 0013](docs/a
 | `matrix does not look like raw UMI counts` | log-normalized `.X` without `layers['counts']`, or <80% approximately integer | Fix the h5ad; do not run |
 | `obs_names must be unique barcodes` | duplicate cell ids on the object | Make barcodes unique outside this tool |
 | `obs['batch'] has N values` | merged object | Split outside this tool |
-| DoubletDetection / DoubletFinder / Solo `fast:skip_gated` | `--fast` / `fast=TRUE` | Omit `--fast` to run them when n ≤ 20,000 |
-| those three `size_gate:>20000` | Sample larger than the size gate | Expected; other Detectors still run |
+| DoubletDetection / DoubletFinder / Solo `size_gate:>20000` | Sample larger than the size gate | Expected; `status=skipped`; other Detectors still run |
+| Solo `status=skipped:no_gpu` (`skipped_reason=no_gpu`) | no CUDA and no Apple MPS | Expected; Solo does not train on CPU. Other Detectors still run |
+| Solo `status=failed` | scVI/SOLO train or predict crashed, or predict() has no `doublet` column | Not a GPU skip. Record `skipped_reason=error:…`; other Detectors still run |
 | Scrublet `native_call` missing | unimodal simulated scores | MAD fallback |
-| DoubletFinder skip on Seurat 5 layers | API mismatch | Record error; other Detectors still run |
-| Solo skip | no GPU/CPU time, no scvi-tools, or no doublet column after train | Expected; rate still comes from other Detectors |
+| DoubletFinder skip on Seurat 5 layers | API mismatch | Record `failed`; other Detectors still run |
+| Solo skip `missing_package:scvi-tools` | scvi-tools not installed | `status=skipped`; rate still comes from other Detectors |
 | All R Detectors skip | `Rscript` missing or R packages missing | Install via `scripts/install_r_packages.R` |
 | `python -m doublet_rate failed` from R | Python package not installed / not on `PYTHONPATH` | `pip install -e ".[full]"` from the repo |
 | Trajectory-like intermediates called doublet | OSCA 8.5 | Interpret; do not auto-remove |
