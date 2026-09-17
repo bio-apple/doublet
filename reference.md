@@ -43,7 +43,7 @@ Do not use DoubletDetection `predict(p_thresh=..., voter_thresh=...)` — those 
 | hybrid | R / scds | `hybrid_score` | Does not support specifying expected rate (Zhang et al. 2024) |
 | DoubletDetection | Python | `BoostClassifier.doublet_score()` | Skip if n>20,000 (Xi and Li 2021: poor scaling) |
 | DoubletFinder | R | pANN only | Internal PCA is method machinery, not a skill product. Skip if n>20,000 |
-| Solo | Python / scvi-tools | soft `doublet` probability, uncalibrated | Train per Sample on CPU. Skip if n>20,000 (Demuxafy: median ~13 h at ~20k) |
+| Solo | Python / scvi-tools | soft `doublet` probability, uncalibrated | Train per Sample on CUDA or MPS if present, else CPU. Skip if n>20,000 (Demuxafy: median ~13 h at ~20k) |
 | DoubletDecon | — | — | Not run: binary output, no Score (Xi and Li 2021) |
 
 Size gate: `n_input > 20000`.

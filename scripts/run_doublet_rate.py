@@ -65,6 +65,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", help="10x MTX directory, 10x .h5, or single-sample .h5ad")
     parser.add_argument("--output-dir", default=None, help="directory for TSV outputs (default: beside input)")
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="skip DoubletDetection, DoubletFinder, and Solo (smoke test / Quick Start)",
+    )
     args = parser.parse_args()
 
     in_path = Path(args.input).expanduser().resolve()
@@ -82,7 +87,8 @@ def main() -> int:
 
     n_input = int(adata.n_obs)
     barcodes = pd.Index(adata.obs_names.astype(str), name="barcode")
-    run_gated = n_input <= SIZE_GATE
+    run_gated = n_input <= SIZE_GATE and not args.fast
+    gated_skip = "fast:skip_gated" if args.fast else f"size_gate:>{SIZE_GATE}"
 
     work = out_dir / f".{stem}_doublet_work"
     mtx_dir = export_mtx(adata, work / "mtx")
@@ -97,14 +103,14 @@ def main() -> int:
         run_solo(adata, det_dir)
     else:
         for name in ("doubletdetection", "solo"):
-            (det_dir / f"{name}.skip.txt").write_text(f"size_gate:>{SIZE_GATE}\n")
+            (det_dir / f"{name}.skip.txt").write_text(gated_skip + "\n")
 
     rscript = ROOT / "detectors_r.R"
     r_cmd = ["Rscript", str(rscript), "--mtx-dir", str(mtx_dir), "--outdir", str(det_dir)]
     if run_gated:
         r_cmd.append("--doubletfinder")
     else:
-        (det_dir / "doubletfinder.skip.txt").write_text(f"size_gate:>{SIZE_GATE}\n")
+        (det_dir / "doubletfinder.skip.txt").write_text(gated_skip + "\n")
     try:
         r = subprocess.run(r_cmd, check=False, capture_output=True, text=True)
     except FileNotFoundError:
@@ -134,6 +140,10 @@ def main() -> int:
             "skipped_reason": "",
             "call_rule": "",
         }
+        if name in GATED and not run_gated:
+            rec["skipped_reason"] = gated_skip
+            rows.append(rec)
+            continue
         if skip and det is None:
             rec["skipped_reason"] = skip
             rows.append(rec)

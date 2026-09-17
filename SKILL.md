@@ -14,7 +14,10 @@ Execute `scripts/run_doublet_rate.py`. Do not reimplement Detector calls. Do not
 ```bash
 python scripts/run_doublet_rate.py INPUT
 python scripts/run_doublet_rate.py INPUT --output-dir DIR
+python scripts/run_doublet_rate.py INPUT --fast
 ```
+
+`--fast` skips DoubletDetection, DoubletFinder, and Solo (install smoke test). `examples/demo.py` is the one-click check on [`test/`](test/).
 
 `INPUT` is a 10x MTX directory (`matrix.mtx` + barcodes + features/genes), a 10x `*.h5`, or a single-sample `.h5ad` of already cell-called raw RNA counts. h5ad uses `layers['counts']` if present, else `.X`. Protein/ATAC/hashing/genotype assays are ignored. Merged objects, integrated embeddings, csv/tsv matrices, and log-normalized values are rejected.
 
