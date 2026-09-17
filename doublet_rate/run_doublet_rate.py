@@ -23,6 +23,25 @@ from .io_counts import (
 
 ALWAYS = ["scdblfinder", "scrublet", "cxds", "bcds", "hybrid"]
 GATED = ["doubletdetection", "doubletfinder", "solo"]
+DETECTOR_LABELS = {
+    "scdblfinder": "scDblFinder",
+    "scrublet": "Scrublet",
+    "cxds": "cxds",
+    "bcds": "bcds",
+    "hybrid": "hybrid",
+    "doubletdetection": "DoubletDetection",
+    "doubletfinder": "DoubletFinder",
+    "solo": "Solo",
+}
+
+
+def format_detector_list() -> str:
+    rows = [(DETECTOR_LABELS[n], "always") for n in ALWAYS]
+    rows += [(DETECTOR_LABELS[n], "gated") for n in GATED]
+    width = max(len(name) for name, _ in rows)
+    return "\n".join(f"{name:<{width}}  {role}" for name, role in rows) + "\n"
+
+
 NATIVE = {
     "scdblfinder": "native:scdblfinder-dbr.sd=1",
     "scrublet": "native:scrublet-bimodality",
@@ -178,7 +197,16 @@ def score_adata(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input", help="10x MTX directory, 10x .h5, or single-sample .h5ad")
+    parser.add_argument(
+        "input",
+        nargs="?",
+        help="10x MTX directory, 10x .h5, or single-sample .h5ad (not required with --list-detectors)",
+    )
+    parser.add_argument(
+        "--list-detectors",
+        action="store_true",
+        help="print the Detector roster (always / gated) and exit",
+    )
     parser.add_argument("--output-dir", default=None, help="directory for TSV outputs (default: beside input)")
     parser.add_argument(
         "--fast",
@@ -208,6 +236,11 @@ def main() -> int:
         help="Detector copied to obs['doublet_score'] and obs['predicted_doublet'] (not a consensus)",
     )
     args = parser.parse_args()
+    if args.list_detectors:
+        sys.stdout.write(format_detector_list())
+        return 0
+    if not args.input:
+        parser.error("the following arguments are required: input")
 
     in_path = Path(args.input).expanduser().resolve()
     try:

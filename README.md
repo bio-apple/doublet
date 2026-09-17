@@ -72,6 +72,7 @@ Reads Seurat/SCE `counts` or AnnData `layers['counts']` (else `.X`). `doublet_sc
 CLI:
 
 ```bash
+python3 -m doublet_rate --list-detectors
 python3 -m doublet_rate test --output-dir test_out --fast --write-h5ad
 # or: doublet-rate test --output-dir test_out --fast
 ```
@@ -140,10 +141,24 @@ One Detector failing does not abort the Sample; it is recorded as `skipped`.
 
 ## Detectors
 
-| Detector | ≤20,000 cells | >20,000 cells | `--fast` |
-|---|---|---|---|
-| scDblFinder, Scrublet, cxds, bcds, hybrid | run | run | run |
-| DoubletDetection, DoubletFinder (pANN), Solo | run | skip (`size_gate:>20000`) | skip (`fast:skip_gated`) |
+| Detector | 默认（n≤20,000） | Size gate（n>20,000） | `--fast` |
+|:---|:---:|:---:|:---:|
+| scDblFinder | ✅ | ✅ | ✅ |
+| Scrublet | ✅ | ✅ | ✅ |
+| cxds | ✅ | ✅ | ✅ |
+| bcds | ✅ | ✅ | ✅ |
+| hybrid | ✅ | ✅ | ✅ |
+| DoubletDetection | ✅ | ⛔ | ⛔ |
+| DoubletFinder (pANN) | ✅ | ⛔ | ⛔ |
+| Solo | ✅ | ⛔ | ⛔ |
+
+⛔ in the Size gate column is `skipped_reason=size_gate:>20000`. ⛔ in `--fast` is `fast:skip_gated`. DoubletDetection, DoubletFinder, and Solo are Gated Detectors; they stay on the roster.
+
+```bash
+python3 -m doublet_rate --list-detectors
+```
+
+prints the same eight names with `always` or `gated`. It does not probe whether packages are installed.
 
 Calls: Scrublet and scDblFinder use their native data-driven thresholds (no Expected Doublet Rate). Everyone else uses Griffiths/MAD high outliers. Expected loading density is never a Call cutoff.
 

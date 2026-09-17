@@ -32,6 +32,7 @@ The contract is the installable packages: `python -m doublet_rate` / `doublet-ra
 ## Run
 
 ```bash
+python -m doublet_rate --list-detectors
 python -m doublet_rate INPUT
 python -m doublet_rate INPUT --output-dir DIR
 python -m doublet_rate INPUT --fast
@@ -50,6 +51,7 @@ python -m doublet_rate test --output-dir test_out --fast
 
 | Flag | Meaning |
 |---|---|
+| `--list-detectors` | Print the roster (`always` / `gated`) and exit. No Sample. Not an install check |
 | `--fast` | Skip DoubletDetection, DoubletFinder, and Solo. Sample table: `status=skipped`, `skipped_reason=fast:skip_gated`. Install smoke test, not the size gate |
 | `--n-jobs` | Workers for artificial-doublet / KNN steps. Default `-1` = all CPUs. Passed to scDblFinder `BPPARAM`, DoubletFinder `paramSweep(num.cores)`, Scrublet KNN, DoubletDetection |
 | `--random-state` | Seed for PCA, neighbor graphs, sampling, and classifiers. Default `42`. Same value in every Detector |
@@ -99,11 +101,18 @@ adata = detect_doublets(adata)
 
 ## Detectors
 
-| Detector | ≤20,000 cells | >20,000 cells | `--fast` |
-|---|---|---|---|
-| scDblFinder, Scrublet, cxds, bcds, hybrid | run | run | run |
-| DoubletDetection, DoubletFinder (pANN only), Solo | run | skip (`size_gate:>20000`) | skip (`fast:skip_gated`) |
-| DoubletDecon | never | never | never |
+| Detector | 默认（n≤20,000） | Size gate（n>20,000） | `--fast` |
+|:---|:---:|:---:|:---:|
+| scDblFinder | ✅ | ✅ | ✅ |
+| Scrublet | ✅ | ✅ | ✅ |
+| cxds | ✅ | ✅ | ✅ |
+| bcds | ✅ | ✅ | ✅ |
+| hybrid | ✅ | ✅ | ✅ |
+| DoubletDetection | ✅ | ⛔ | ⛔ |
+| DoubletFinder (pANN) | ✅ | ⛔ | ⛔ |
+| Solo | ✅ | ⛔ | ⛔ |
+
+⛔ in the Size gate column is `skipped_reason=size_gate:>20000`. ⛔ in `--fast` is `fast:skip_gated`. DoubletDetection, DoubletFinder, and Solo are Gated Detectors; they stay on the roster. DoubletDecon is never run (no continuous Score).
 
 One Detector failing does not abort the Sample. Failed Detectors are `skipped` with a reason; their cell-table columns are empty.
 
