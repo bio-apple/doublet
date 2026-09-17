@@ -1,0 +1,17 @@
+^doublet_rate$
+^\.egg-info$
+^rna_doublet_rate\.egg-info$
+^scripts$
+^test$
+^test_out$
+^test_runs$
+^tests$
+^docs$
+^examples$
+^pyproject\.toml$
+^\.agents$
+^\.gitignore$
+^SKILL\.md$
+^CONTEXT\.md$
+^reference\.md$
+^\.cursor$

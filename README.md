@@ -40,37 +40,39 @@ This tool does **not** QC, filter low-quality cells, cluster, or integrate. Do c
 
 **Do not pass** log-normalized, scaled, or integrated matrices. They are rejected. Do not score `obsm` embeddings.
 
-## Objects (AnnData / Seurat / SCE)
+## Objects (Seurat / SCE / AnnData)
 
-Do not extract a count matrix by hand. Pass the object; results go back onto it.
+Do not extract a count matrix by hand. Pass the object; results go back onto it. Seurat is the primary object API.
 
-Python / Scanpy:
+R:
+
+```r
+# Python package first (Scrublet / DoubletDetection / Solo)
+# pip install -e ".[full]"
+remotes::install_github("bio-apple/doublet")
+library(doubletRate)
+seu <- annotate_doublets(seu)
+sce <- annotate_doublets(sce)
+# seu$doublet_score, seu$predicted_doublet
+```
+
+Python / Scanpy (second entry):
 
 ```python
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path("scripts").resolve()))
-from annotate import detect_doublets
+from doublet_rate import detect_doublets
 
 adata = detect_doublets(adata)
 # adata.obs["doublet_score"]
 # adata.obs["predicted_doublet"]
 ```
 
-Reads `layers['counts']` if `.X` is normalized. `doublet_score` / `predicted_doublet` copy **one** Detector (default scDblFinder), not a fused consensus. Empty Calls are NA in `predicted_doublet`, not False. Cells are not removed. Per-Detector `{name}_score` / `{name}_call` are also written.
+Reads Seurat/SCE `counts` or AnnData `layers['counts']` (else `.X`). `doublet_score` / `predicted_doublet` copy **one** Primary Detector (default scDblFinder), not a fused consensus. Empty Calls are NA in `predicted_doublet`, not False. Cells are not removed. Per-Detector `{name}_score` / `{name}_call` are also written.
 
-R, Seurat or SingleCellExperiment (`counts` assay / RNA counts layer):
-
-```r
-source("scripts/annotate_object.R")
-sce <- annotate_doublets(sce, fast = TRUE, n_jobs = 8)
-seu <- annotate_doublets(seu, fast = TRUE, n_jobs = 8)
-```
-
-CLI can also emit an annotated h5ad:
+CLI:
 
 ```bash
-python3 scripts/run_doublet_rate.py test --output-dir test_out --fast --write-h5ad
+python3 -m doublet_rate test --output-dir test_out --fast --write-h5ad
+# or: doublet-rate test --output-dir test_out --fast
 ```
 
 ## Quick Start
@@ -78,17 +80,26 @@ python3 scripts/run_doublet_rate.py test --output-dir test_out --fast --write-h5
 ```bash
 git clone https://github.com/bio-apple/doublet.git
 cd doublet
-python3 -m pip install -r scripts/requirements.txt
+python3 -m pip install -e ".[full]"
 Rscript scripts/install_r_packages.R
-python3 examples/demo.py
+R CMD INSTALL .
+python3 -m doublet_rate test --output-dir test_out --fast
 ```
 
-`examples/demo.py` loads [`test/`](test/) (10x pbmc3k filtered MTX) and runs the fast Detectors (`--fast`). It should print `demo ok`.
+Smoke test on [`test/`](test/) (10x pbmc3k filtered MTX). It should write `test_out/test.doublet_sample.tsv`.
 
-Equivalent one-liner:
+Seurat:
+
+```r
+library(doubletRate)
+seu <- annotate_doublets(seu, fast = TRUE)
+```
+
+CLI equivalent:
 
 ```bash
-python3 scripts/run_doublet_rate.py test --output-dir test_out --fast
+python3 -m doublet_rate test --output-dir test_out --fast
+doublet-rate test --output-dir test_out --fast
 ```
 
 ## Test data
@@ -100,9 +111,9 @@ Full roster including Solo (omit `--fast`) is slow: scVI/SOLO train for hundreds
 ## Full Sample run
 
 ```bash
-python3 scripts/run_doublet_rate.py PATH/TO/SAMPLE --output-dir OUT
-python3 scripts/run_doublet_rate.py PATH/TO/SAMPLE --output-dir OUT --n-jobs 8
-python3 scripts/run_doublet_rate.py PATH/TO/SAMPLE --output-dir OUT --random-state 42
+python3 -m doublet_rate PATH/TO/SAMPLE --output-dir OUT
+python3 -m doublet_rate PATH/TO/SAMPLE --output-dir OUT --n-jobs 8
+python3 -m doublet_rate PATH/TO/SAMPLE --output-dir OUT --random-state 42
 ```
 
 `--n-jobs` (default `-1` = all CPUs) parallelizes artificial-doublet / KNN work: scDblFinder `BPPARAM`, DoubletFinder `paramSweep(num.cores)`, Scrublet sklearn neighbors, DoubletDetection `n_jobs`.

@@ -3,12 +3,12 @@
 
 args <- commandArgs(trailingOnly = FALSE)
 file_arg <- grep("^--file=", args, value = TRUE)
-src <- if (length(file_arg)) {
-  file.path(dirname(normalizePath(sub("^--file=", "", file_arg))), "annotate_object.R")
+root <- if (length(file_arg)) {
+  dirname(dirname(normalizePath(sub("^--file=", "", file_arg))))
 } else {
-  "annotate_object.R"
+  getwd()
 }
-source(src)
+source(file.path(root, "R", "annotate_doublets.R"))
 
 cells <- data.frame(
   barcode = c("c1", "c2", "c3"),

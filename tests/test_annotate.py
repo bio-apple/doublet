@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_SRC = Path(__file__).resolve().parents[1]
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
 import numpy as np
 import pandas as pd
 
-from annotate import attach_obs, calls_to_is_doublet, pick_primary
-from io_counts import InputError, as_counts_adata
+from doublet_rate.annotate import attach_obs, calls_to_is_doublet, pick_primary
+from doublet_rate.io_counts import InputError, as_counts_adata
 
 
 def test_as_counts_adata_uses_layer_not_x():
@@ -78,7 +85,6 @@ def test_attach_obs_aliases_primary_not_fusion():
 
 def test_h5ad_roundtrip_aliases():
     import tempfile
-    from pathlib import Path
 
     import anndata as ad
 

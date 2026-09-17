@@ -9,7 +9,7 @@ This file is the **parameter and source notebook**. Use it when you need the exa
 | Why a rule exists | [docs/adr/](docs/adr/) |
 | Quick Start | [README.md](README.md) |
 
-The runnable entrypoint is `scripts/run_doublet_rate.py`. Scanpy: `detect_doublets(adata)` in `scripts/annotate.py`. R: `annotate_doublets(x)` in `scripts/annotate_object.R`.
+The runnable entrypoint is `python -m doublet_rate` (shim: `scripts/run_doublet_rate.py`). Scanpy: `from doublet_rate import detect_doublets`. Seurat/SCE: `library(doubletRate); annotate_doublets(x)`.
 
 ## Contents
 
@@ -78,7 +78,7 @@ Size gate: `n_input > 20000`. See [ADR 0005](docs/adr/0005-detector-roster-and-s
 - 10x MTX directory
 - 10x `filtered_feature_bc_matrix.h5` (`gex_only=True`)
 - h5ad with raw counts in `layers['counts']` or `.X`
-- in-memory AnnData (`detect_doublets`); Seurat or SingleCellExperiment (`annotate_doublets`)
+- in-memory AnnData (`detect_doublets`); Seurat or SingleCellExperiment (`doubletRate::annotate_doublets`)
 
 **Reject**
 

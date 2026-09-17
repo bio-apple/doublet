@@ -4,3 +4,7 @@ __pycache__/
 lightning_logs/
 test_out/
 test_runs/
+*.egg-info/
+.Rproj.user
+.Rhistory
+

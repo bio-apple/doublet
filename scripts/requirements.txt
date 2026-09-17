@@ -1,6 +1,8 @@
-scanpy>=1.9
+# Prefer from repo root: pip install -e ".[full]"
+anndata
 numpy
 pandas
+scanpy>=1.9
 scipy
 scrublet
 doubletdetection

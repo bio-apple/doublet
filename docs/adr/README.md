@@ -25,3 +25,5 @@ Each file is one paragraph: context, decision, why. Status is accepted unless a 
 | [0009](0009-continue-on-detector-failure.md) | One Detector failing does not abort the Sample; it is recorded as skipped. |
 | [0010](0010-scripts-enforce-call-rules.md) | Execute `scripts/`; do not reimplement Detector calls in a one-off notebook. |
 | [0011](0011-rate-denominator-is-n-called.md) | Predicted Doublet Rate = `n_doublet / n_called`. Empty Calls are not singlets. |
+| [0012](0012-primary-detector-scanpy-columns.md) | `doublet_score` / `predicted_doublet` copy one Primary Detector (default scDblFinder), not a consensus. |
+| [0013](0013-dual-r-python-packages.md) | R package `doubletRate` and Python package `doublet_rate` in one repo; `scripts/` are shims. |

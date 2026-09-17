@@ -10,7 +10,7 @@ This file is the **glossary** for this repository. It defines the words used in 
 
 ## How the terms connect
 
-A **Sample** is one capture of already cell-called RNA counts. Each **Detector** emits a **Doublet Score** for every cell. A data-driven threshold turns that Score into a **Doublet Call**. The **Predicted Doublet Rate** is `n_doublet / n_called` for that Detector. Detectors are not fused. **Expected Doublet Rate** is not used to make a Call. **Removal** of cells is out of scope.
+A **Sample** is one capture of already cell-called RNA counts. Each **Detector** emits a **Doublet Score** for every cell. A data-driven threshold turns that Score into a **Doublet Call**. The **Predicted Doublet Rate** is `n_doublet / n_called` for that Detector. Detectors are not fused. The **Primary Detector** is the one Detector whose Score and Call are copied to the Scanpy-facing columns; that copy is not a consensus. **Expected Doublet Rate** is not used to make a Call. **Removal** of cells is out of scope.
 
 ## Language
 
@@ -45,6 +45,10 @@ _Avoid_: Using this term for Predicted Doublet Rate
 **Skipped Detector**:
 A Detector absent from this Sample's results because of the cell-count gate, because it cannot emit a Score under the rules of this context, or because it errored. Other Detectors still report.
 _Avoid_: Failed QC, filtered method, aborted analysis
+
+**Primary Detector**:
+The one Detector whose Score and Call are copied onto the convenience columns `doublet_score` and `predicted_doublet`. It is a member of the roster, not a fused Call.
+_Avoid_: Consensus call, default method as if it were the only Detector, main label
 
 **Removal**:
 Dropping called doublets from the dataset before downstream analysis. This context does not do Removal.

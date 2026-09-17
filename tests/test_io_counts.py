@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import sys
 import tempfile
 from pathlib import Path
+
+_SRC = Path(__file__).resolve().parents[1]
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
 import numpy as np
 from scipy import sparse
 from scipy.io import mmread, mmwrite
 
-from io_counts import export_mtx, sanitize_sparse_indices
+from doublet_rate.io_counts import export_mtx, sanitize_sparse_indices
 
 
 def _csr_with_indices(data, indices, indptr, shape):
@@ -17,7 +22,6 @@ def _csr_with_indices(data, indices, indptr, shape):
 
 
 def test_one_based_columns_are_shifted():
-    # 2 cells x 3 genes; gene indices 1..3 (max == n_cols).
     X = _csr_with_indices([10.0, 20.0, 30.0], [1, 2, 3], [0, 2, 3], (2, 3))
     assert int(X.indices.max()) == 3
     Y = sanitize_sparse_indices(X)

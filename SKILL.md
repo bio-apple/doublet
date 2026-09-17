@@ -16,7 +16,7 @@ This file is the **run contract**. It tells a person or an agent what to execute
 
 Measure doublets on **one Sample**. Do not QC, cluster, integrate, fuse Detectors, or remove cells.
 
-Execute `scripts/run_doublet_rate.py` (or the AnnData / Seurat / SCE wrappers below). Do not reimplement Detector calls. Do not pass an Expected Doublet Rate as a Call cutoff (`nExp`, `dbr`, 10x 0.8%/1000 cells, Solo `--expected_number_of_doublets`, top-x% of scores).
+Execute `python -m doublet_rate` (or the shim `scripts/run_doublet_rate.py`). Seurat: `library(doubletRate); annotate_doublets(seu)`. Scanpy: `from doublet_rate import detect_doublets`. Do not reimplement Detector calls. Do not pass an Expected Doublet Rate as a Call cutoff (`nExp`, `dbr`, 10x 0.8%/1000 cells, Solo `--expected_number_of_doublets`, top-x% of scores).
 
 ## Contents
 
@@ -32,12 +32,13 @@ Execute `scripts/run_doublet_rate.py` (or the AnnData / Seurat / SCE wrappers be
 ## Run
 
 ```bash
-python scripts/run_doublet_rate.py INPUT
-python scripts/run_doublet_rate.py INPUT --output-dir DIR
-python scripts/run_doublet_rate.py INPUT --fast
-python scripts/run_doublet_rate.py INPUT --n-jobs 8
-python scripts/run_doublet_rate.py INPUT --random-state 42
-python scripts/run_doublet_rate.py INPUT --write-h5ad
+python -m doublet_rate INPUT
+python -m doublet_rate INPUT --output-dir DIR
+python -m doublet_rate INPUT --fast
+python -m doublet_rate INPUT --n-jobs 8
+python -m doublet_rate INPUT --random-state 42
+python -m doublet_rate INPUT --write-h5ad
+# shim: python scripts/run_doublet_rate.py INPUT
 ```
 
 | Flag | Meaning |
@@ -72,24 +73,21 @@ Default location is beside the input (or `--output-dir`):
 
 ## In-memory objects
 
-Do not convert the user through MTX by hand. Do not score `obsm` embeddings. Do not fuse Detectors into the two Scanpy columns.
+Do not convert the user through MTX by hand. Do not score `obsm` embeddings. Do not fuse Detectors into the two convenience columns.
 
-Python (AnnData; reads `layers['counts']` else `.X`; does not replace `.X` when a counts layer exists):
-
-```python
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path("scripts").resolve()))
-from annotate import detect_doublets
-
-adata = detect_doublets(adata)
-```
-
-R (Seurat or SingleCellExperiment; `counts` assay / RNA counts layer):
+R first (Seurat / SingleCellExperiment; `counts` assay / RNA counts layer):
 
 ```r
-source("scripts/annotate_object.R")
+library(doubletRate)
 x <- annotate_doublets(x, fast = TRUE, n_jobs = 8)
+```
+
+Python (AnnData; reads `layers['counts']` else `.X`):
+
+```python
+from doublet_rate import detect_doublets
+
+adata = detect_doublets(adata)
 ```
 
 `obs['doublet_score']` and `obs['predicted_doublet']` (and the same names on Seurat `meta.data` / SCE `colData`) copy **one** Detector (`primary`, default scDblFinder). Empty Calls are NA in `predicted_doublet`, not False. Cells are not removed. `is_doublet` is the same boolean as `predicted_doublet`.
@@ -117,7 +115,7 @@ DoubletFinder `nExp=1` is API-only. Discard the DF class column. Call from MAD o
 
 ## Dependencies
 
-Python: `scripts/requirements.txt`. R: `Rscript scripts/install_r_packages.R`. Missing packages skip that Detector; they do not stop the rest.
+Python: `pip install -e ".[full]"` (or `scripts/requirements.txt`). R: `R CMD INSTALL .` plus `Rscript scripts/install_r_packages.R`. Missing packages skip that Detector; they do not stop the rest.
 
 ## Do not
 

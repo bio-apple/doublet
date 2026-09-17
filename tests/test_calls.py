@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
+
+_SRC = Path(__file__).resolve().parents[1]
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
 import numpy as np
 import pandas as pd
 
-from calls import griffiths_mad_calls, rate_from_calls
-from detectors_python import DEFAULT_RANDOM_STATE, resolve_n_jobs, seed_everything
+from doublet_rate.calls import griffiths_mad_calls, rate_from_calls
+from doublet_rate.detectors_python import DEFAULT_RANDOM_STATE, resolve_n_jobs, seed_everything
 
 
 def test_mad_calls_high_outliers():
