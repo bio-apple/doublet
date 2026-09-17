@@ -5,7 +5,8 @@ Authors@R: person("bio-apple", role = c("aut", "cre"), email = "noreply@example.
 Description: Score every cell in one already cell-called RNA Sample, make a
     data-driven Call per Detector, and report a Predicted Doublet Rate. Does
     not remove cells and does not fuse Detectors. Seurat and SingleCellExperiment
-    objects are annotated in place; Python Detectors are invoked when available.
+    objects are annotated in place via python -m doublet_rate. Missing Python
+    is a hard failure; missing detector packages skip that Detector.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.2)

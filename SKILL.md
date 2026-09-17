@@ -16,7 +16,7 @@ This file is the **run contract**. It tells a person or an agent what to execute
 
 Measure doublets on **one Sample**. Do not QC, cluster, integrate, fuse Detectors, or remove cells.
 
-Execute `python -m doublet_rate` (or the shim `scripts/run_doublet_rate.py`). Seurat: `library(doubletRate); annotate_doublets(seu)`. Scanpy: `from doublet_rate import detect_doublets`. Do not reimplement Detector calls. Do not pass an Expected Doublet Rate as a Call cutoff (`nExp`, `dbr`, 10x 0.8%/1000 cells, Solo `--expected_number_of_doublets`, top-x% of scores).
+The contract is the installable packages: `python -m doublet_rate` / `doublet-rate`, `from doublet_rate import detect_doublets`, and `library(doubletRate); annotate_doublets(x)`. `scripts/run_doublet_rate.py` and `scripts/annotate_object.R` are shims. Do not reimplement Detector calls. The R function always shells out to `python -m doublet_rate`; missing Python is a hard failure, not a partial R-only run. Do not pass an Expected Doublet Rate as a Call cutoff (`nExp`, `dbr`, 10x 0.8%/1000 cells, Solo `--expected_number_of_doublets`, top-x% of scores).
 
 ## Contents
 
@@ -37,19 +37,24 @@ python -m doublet_rate INPUT --output-dir DIR
 python -m doublet_rate INPUT --fast
 python -m doublet_rate INPUT --n-jobs 8
 python -m doublet_rate INPUT --random-state 42
+python -m doublet_rate INPUT --primary scdblfinder
 python -m doublet_rate INPUT --write-h5ad
 # shim: python scripts/run_doublet_rate.py INPUT
 ```
 
+Install smoke test (skips the three Gated Detectors):
+
+```bash
+python -m doublet_rate test --output-dir test_out --fast
+```
+
 | Flag | Meaning |
 |---|---|
-| `--fast` | Skip DoubletDetection, DoubletFinder, and Solo (install smoke test) |
+| `--fast` | Skip DoubletDetection, DoubletFinder, and Solo. Sample table: `status=skipped`, `skipped_reason=fast:skip_gated`. Install smoke test, not the size gate |
 | `--n-jobs` | Workers for artificial-doublet / KNN steps. Default `-1` = all CPUs. Passed to scDblFinder `BPPARAM`, DoubletFinder `paramSweep(num.cores)`, Scrublet KNN, DoubletDetection |
-| `--random-state` | Seed for PCA, neighbor graphs, sampling, and classifiers. Default `42`. Same value in every Detector. |
-| `--write-h5ad` | Write `{stem}.doublet.h5ad` with `obs['doublet_score']` and `obs['predicted_doublet']` plus per-Detector columns |
-| `--primary` | Detector copied into those two Scanpy columns (default `scdblfinder`). Not a consensus |
-
-`examples/demo.py` is the one-click check on [`test/`](test/).
+| `--random-state` | Seed for PCA, neighbor graphs, sampling, and classifiers. Default `42`. Same value in every Detector |
+| `--write-h5ad` | Write `{stem}.doublet.h5ad` with `obs['doublet_score']`, `obs['predicted_doublet']`, `obs['is_doublet']`, plus per-Detector columns |
+| `--primary` | Detector copied into those convenience columns (default `scdblfinder`). Not a consensus. If it did not run, copy the first Detector that did |
 
 ## Input
 
@@ -59,11 +64,11 @@ python -m doublet_rate INPUT --write-h5ad
 - 10x `*.h5`
 - single-sample `.h5ad` (`layers['counts']` if present, else `.X`)
 
-Protein, ATAC, hashing, and genotype assays are ignored. Merged objects, integrated embeddings, csv/tsv matrices, `obsm` embeddings, and log-normalized values are rejected.
+Counts must be non-negative and look like integers (≥80% of finite values within `1e-6` of an integer). Barcodes must be unique. Protein, ATAC, hashing, and genotype assays are ignored. Merged objects, integrated embeddings, csv/tsv matrices, `obsm` embeddings, and log-normalized values are rejected.
 
 ## Output
 
-Default location is beside the input (or `--output-dir`):
+Default location is `--output-dir`. If omitted, files are written beside the input path (for a directory input: the parent of that directory).
 
 | File | Contents |
 |---|---|
@@ -73,9 +78,9 @@ Default location is beside the input (or `--output-dir`):
 
 ## In-memory objects
 
-Do not convert the user through MTX by hand. Do not score `obsm` embeddings. Do not fuse Detectors into the two convenience columns.
+Do not convert the user through MTX by hand. Do not score `obsm` embeddings. Do not fuse Detectors into the convenience columns. Object APIs write TSV side output to `output_dir` when given, otherwise a tempfile.
 
-R first (Seurat / SingleCellExperiment; `counts` assay / RNA counts layer):
+R first (Seurat / SingleCellExperiment; `counts` assay / RNA counts layer). Requires `python -m doublet_rate`:
 
 ```r
 library(doubletRate)
@@ -90,19 +95,19 @@ from doublet_rate import detect_doublets
 adata = detect_doublets(adata)
 ```
 
-`obs['doublet_score']` and `obs['predicted_doublet']` (and the same names on Seurat `meta.data` / SCE `colData`) copy **one** Detector (`primary`, default scDblFinder). Empty Calls are NA in `predicted_doublet`, not False. Cells are not removed. `is_doublet` is the same boolean as `predicted_doublet`.
+`doublet_score`, `predicted_doublet`, and `is_doublet` copy **one** Detector (`primary`, default scDblFinder) on AnnData `obs`, Seurat `meta.data`, and SCE `colData`. Empty Calls are NA in `predicted_doublet`, not False. `is_doublet` is the same boolean as `predicted_doublet`. Cells are not removed.
 
 ## Detectors
 
-| Detector | ≤20,000 cells | >20,000 cells |
-|---|---|---|
-| scDblFinder, Scrublet, cxds, bcds, hybrid | run | run |
-| DoubletDetection, DoubletFinder (pANN only), Solo | run | skip (`size_gate:>20000`) |
-| DoubletDecon | never | never |
+| Detector | ≤20,000 cells | >20,000 cells | `--fast` |
+|---|---|---|---|
+| scDblFinder, Scrublet, cxds, bcds, hybrid | run | run | run |
+| DoubletDetection, DoubletFinder (pANN only), Solo | run | skip (`size_gate:>20000`) | skip (`fast:skip_gated`) |
+| DoubletDecon | never | never | never |
 
 One Detector failing does not abort the Sample. Failed Detectors are `skipped` with a reason; their cell-table columns are empty.
 
-R and Python run in their native languages and join on `barcode`.
+Python package `doublet_rate` orchestrates the roster. R Detectors still run in R (`detectors_r.R`) and Python Detectors in Python; results join on `barcode`.
 
 ## Calls and rate
 
@@ -115,7 +120,7 @@ DoubletFinder `nExp=1` is API-only. Discard the DF class column. Call from MAD o
 
 ## Dependencies
 
-Python: `pip install -e ".[full]"` (or `scripts/requirements.txt`). R: `R CMD INSTALL .` plus `Rscript scripts/install_r_packages.R`. Missing packages skip that Detector; they do not stop the rest.
+Python: `pip install -e ".[full]"` (package name `rna-doublet-rate`; or `scripts/requirements.txt`). R: `R CMD INSTALL .` plus `Rscript scripts/install_r_packages.R`. The R package still needs the Python package. Missing *detector* packages skip that Detector; they do not stop the rest. Missing `python -m doublet_rate` stops the R function.
 
 ## Do not
 
@@ -123,5 +128,6 @@ Python: `pip install -e ".[full]"` (or `scripts/requirements.txt`). R: `R CMD IN
 - Feed Expected Doublet Rate into a Call
 - Cluster or integrate so that scDblFinder/DoubletFinder can use labels
 - Fuse Detectors into a consensus Call
+- Treat `--fast` skips as a size-gate failure
 - Run on spatial, plate-based, or multi-sample objects
 - Rewrite Detector invocation in a one-off notebook

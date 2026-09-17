@@ -8,3 +8,11 @@ test/
   barcodes.tsv
   genes.tsv
 ```
+
+Smoke test (skips DoubletDetection, DoubletFinder, and Solo):
+
+```bash
+python3 -m doublet_rate test --output-dir test_out --fast
+```
+
+Those three rows in `test.doublet_sample.tsv` are `skipped_reason=fast:skip_gated`. Omit `--fast` for the full roster.

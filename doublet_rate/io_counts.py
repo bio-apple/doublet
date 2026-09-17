@@ -53,7 +53,7 @@ def assert_single_sample(adata) -> None:
             n = adata.obs[key].nunique(dropna=True)
             if n > 1:
                 raise InputError(
-                    f"obs['{key}'] has {n} values; this skill accepts one Sample per run"
+                    f"obs['{key}'] has {n} values; this tool accepts one Sample per run"
                 )
 
 

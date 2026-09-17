@@ -174,18 +174,21 @@ run_python_cli <- function(mtx_dir, output_dir, fast, n_jobs, random_state, pyth
 
 #' Annotate a Seurat or SingleCellExperiment Sample
 #'
-#' Runs the Detector roster and writes per-Detector scores/calls plus
-#' \code{doublet_score} / \code{predicted_doublet} from the Primary Detector.
-#' Does not remove cells. Python Detectors are skipped if Python packages are missing.
+#' Runs the Detector roster via \code{python -m doublet_rate} and writes
+#' per-Detector scores/calls plus \code{doublet_score} / \code{predicted_doublet}
+#' / \code{is_doublet} from the Primary Detector. Does not remove cells.
+#' Missing detector packages skip that Detector; missing Python is a hard failure.
 #'
 #' @param x A Seurat or SingleCellExperiment object with raw counts.
-#' @param output_dir Optional directory for TSV side outputs.
-#' @param fast Skip DoubletDetection, DoubletFinder, and Solo.
+#' @param output_dir Optional directory for TSV side outputs. Default is a tempfile.
+#' @param fast Skip DoubletDetection, DoubletFinder, and Solo (\code{fast:skip_gated}).
 #' @param n_jobs Worker count (\code{-1} = all CPUs).
 #' @param random_state Seed for PCA, neighbors, sampling, and classifiers.
-#' @param primary Detector copied to \code{doublet_score} / \code{predicted_doublet}.
-#' @param python Python executable (default \code{DOUBLET_PYTHON} or \code{python3}).
-#' @return \code{x} with annotation columns added.
+#' @param primary Detector copied to \code{doublet_score} / \code{predicted_doublet} /
+#'   \code{is_doublet}. Not a consensus.
+#' @param python Python executable that can run \code{python -m doublet_rate}
+#'   (default \code{DOUBLET_PYTHON} or \code{python3}).
+#' @return \code{x} with annotation columns added. Cells are not removed.
 #' @export
 annotate_doublets <- function(
     x,

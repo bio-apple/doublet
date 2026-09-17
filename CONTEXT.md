@@ -10,7 +10,7 @@ This file is the **glossary** for this repository. It defines the words used in 
 
 ## How the terms connect
 
-A **Sample** is one capture of already cell-called RNA counts. Each **Detector** emits a **Doublet Score** for every cell. A data-driven threshold turns that Score into a **Doublet Call**. The **Predicted Doublet Rate** is `n_doublet / n_called` for that Detector. Detectors are not fused. The **Primary Detector** is the one Detector whose Score and Call are copied to the Scanpy-facing columns; that copy is not a consensus. **Expected Doublet Rate** is not used to make a Call. **Removal** of cells is out of scope.
+A **Sample** is one capture of already cell-called RNA counts. Each **Detector** emits a **Doublet Score** for every cell. A data-driven **Call Rule** turns that Score into a **Doublet Call**. The **Predicted Doublet Rate** is `n_doublet / n_called` for that Detector. Detectors are not fused. The **Primary Detector** is the one Detector whose Score and Call are copied to the convenience columns; that copy is not a consensus. **Gated Detectors** may be a **Skipped Detector** on a given Sample. **Expected Doublet Rate** is not used to make a Call. **Removal** of cells is out of scope.
 
 ## Language
 
@@ -31,8 +31,12 @@ A per-cell continuous value from one Detector, higher meaning more doublet-like.
 _Avoid_: Probability (unless the method actually emits a calibrated probability), rank
 
 **Doublet Call**:
-A per-cell singlet-or-doublet label obtained by a data-driven threshold on that Detector's Doublet Score. Expected Doublet Rate is not an input to this threshold.
+A per-cell label obtained by a data-driven Call Rule on that Detector's Doublet Score: doublet, singlet, or empty. An empty Call is a third state, not a singlet. Expected Doublet Rate is not an input to this threshold.
 _Avoid_: Filter, removal, classification as a synonym for the whole analysis
+
+**Call Rule**:
+The named data-driven procedure that turns one Detector's Score into a Call. Native when the method has a data-driven threshold that does not take Expected Doublet Rate; otherwise Griffiths/MAD. Each Detector has its own Call Rule. Call Rules are not fused.
+_Avoid_: Cutoff, expected-rate threshold, consensus rule
 
 **Predicted Doublet Rate**:
 The proportion of cells with a non-empty Call from one Detector that were called doublet (`n_doublet / n_called`). Empty Calls are not singlets. Each Detector reports its own rate; rates are not fused.
@@ -42,13 +46,17 @@ _Avoid_: Doublet rate (unqualified), identification rate, expected rate, consens
 An a priori proportion taken from loading density or chemistry, supplied as an algorithm input. This context does not use it to make a Call.
 _Avoid_: Using this term for Predicted Doublet Rate
 
+**Gated Detector**:
+DoubletDetection, DoubletFinder, and Solo. Members of the roster that become a Skipped Detector when the Sample is above the size gate, or when the run omits the slow Detectors.
+_Avoid_: Optional detector as if they were outside the roster, failed method
+
 **Skipped Detector**:
-A Detector absent from this Sample's results because of the cell-count gate, because it cannot emit a Score under the rules of this context, or because it errored. Other Detectors still report.
+A Detector absent from this Sample's results because of the size gate, because the run omitted the Gated Detectors, because it cannot emit a Score under the rules of this context, or because it errored. Other Detectors still report.
 _Avoid_: Failed QC, filtered method, aborted analysis
 
 **Primary Detector**:
-The one Detector whose Score and Call are copied onto the convenience columns `doublet_score` and `predicted_doublet`. It is a member of the roster, not a fused Call.
-_Avoid_: Consensus call, default method as if it were the only Detector, main label
+The one Detector whose Score and Call are copied onto the convenience columns `doublet_score`, `predicted_doublet`, and `is_doublet` on AnnData, Seurat, and SingleCellExperiment. It is a member of the roster, not a fused Call. If the requested Primary Detector did not run, the first Detector that did run is copied instead.
+_Avoid_: Consensus call, default method as if it were the only Detector, main label, Scanpy-only columns
 
 **Removal**:
 Dropping called doublets from the dataset before downstream analysis. This context does not do Removal.

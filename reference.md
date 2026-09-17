@@ -9,7 +9,7 @@ This file is the **parameter and source notebook**. Use it when you need the exa
 | Why a rule exists | [docs/adr/](docs/adr/) |
 | Quick Start | [README.md](README.md) |
 
-The runnable entrypoint is `python -m doublet_rate` (shim: `scripts/run_doublet_rate.py`). Scanpy: `from doublet_rate import detect_doublets`. Seurat/SCE: `library(doubletRate); annotate_doublets(x)`.
+The runnable entrypoint is `python -m doublet_rate` (shim: `scripts/run_doublet_rate.py`). Scanpy: `from doublet_rate import detect_doublets`. Seurat/SCE: `library(doubletRate); annotate_doublets(x)` — that R function always calls `python -m doublet_rate`.
 
 ## Contents
 
@@ -64,12 +64,12 @@ See [ADR 0006](docs/adr/0006-native-then-mad-calls.md).
 | cxds | R / scds | `cxds_score` | Co-expression; no expected rate for scoring (Bais and Kostka 2020) |
 | bcds | R / scds | `bcds_score` | |
 | hybrid | R / scds | `hybrid_score` | Does not support specifying expected rate (Zhang et al. 2024) |
-| DoubletDetection | Python | `BoostClassifier.doublet_score()` | Skip if n>20,000 (Xi and Li 2021: poor scaling) |
-| DoubletFinder | R | pANN only | Internal PCA is method machinery, not a skill product. Skip if n>20,000 |
-| Solo | Python / scvi-tools | soft `doublet` probability, uncalibrated | Train per Sample on CUDA or MPS if present, else CPU. Skip if n>20,000 (Demuxafy: median ~13 h at ~20k) |
+| DoubletDetection | Python | `BoostClassifier.doublet_score()` | Gated Detector. Skip if n>20,000 (`size_gate:>20000`) or `--fast` (`fast:skip_gated`) (Xi and Li 2021: poor scaling) |
+| DoubletFinder | R | pANN only | Gated Detector. Internal Normalize/Scale/PCA is method machinery, not QC or clustering by this tool. Skip if n>20,000 or `--fast` |
+| Solo | Python / scvi-tools | soft `doublet` probability, uncalibrated | Gated Detector. Train per Sample on CUDA or MPS if present, else CPU. Skip if n>20,000 (Demuxafy: median ~13 h at ~20k) or `--fast` |
 | DoubletDecon | — | — | Not run: binary output, no Score (Xi and Li 2021) |
 
-Size gate: `n_input > 20000`. See [ADR 0005](docs/adr/0005-detector-roster-and-size-gate.md).
+Size gate: `n_input > 20000`. `--fast` skips the same three Gated Detectors regardless of cell count. See [ADR 0005](docs/adr/0005-detector-roster-and-size-gate.md).
 
 ## I/O
 
@@ -83,7 +83,9 @@ Size gate: `n_input > 20000`. See [ADR 0005](docs/adr/0005-detector-roster-and-s
 **Reject**
 
 - csv/tsv
-- negative or clearly non-integer expression
+- negative values
+- matrices that are not ≥80% approximately integer (heuristic for raw UMI/read counts)
+- duplicate barcodes (`obs_names must be unique barcodes` on the object API)
 - `obs` sample/batch columns with more than one value
 - empty matrices
 - scoring `obsm` embeddings (PCA/UMAP) as if they were counts
@@ -92,11 +94,11 @@ Size gate: `n_input > 20000`. See [ADR 0005](docs/adr/0005-detector-roster-and-s
 
 Cell table: all input barcodes. Missing Detector values stay empty.
 
-Sample table: one row per Detector in the roster, including skips.
+Sample table: one row per Detector in the roster, including skips. Columns include `status`, `skipped_reason` (`fast:skip_gated`, `size_gate:>20000`, `missing_package:…`, `error:…`), and `call_rule`.
 
-On AnnData / Seurat / SCE, per-Detector `{name}_score` and `{name}_call` are written onto the object. Scanpy-style `doublet_score` and `predicted_doublet` are copies of one Detector (`primary`, default scDblFinder), not a consensus. `predicted_doublet` is TRUE/FALSE/NA; empty Call is NA so it is not counted as a singlet ([ADR 0011](docs/adr/0011-rate-denominator-is-n-called.md)). `is_doublet` is the same boolean. Cells are not subsetted.
+On AnnData / Seurat / SCE, per-Detector `{name}_score` and `{name}_call` are written onto the object. Convenience columns `doublet_score`, `predicted_doublet`, and `is_doublet` are copies of one Detector (`primary`, default scDblFinder), not a consensus ([ADR 0012](docs/adr/0012-primary-detector-scanpy-columns.md)). If the requested Primary Detector did not run, the first Detector with `status=ran` in roster order is copied. `predicted_doublet` is TRUE/FALSE/NA; empty Call is NA so it is not counted as a singlet ([ADR 0011](docs/adr/0011-rate-denominator-is-n-called.md)). `is_doublet` is the same boolean. The copied Detector name is stored as `uns['doublet_primary']` / Seurat `misc$doublet_primary` / SCE `metadata$doublet_primary`. Cells are not subsetted.
 
-`--write-h5ad` writes `{stem}.doublet.h5ad` from the CLI.
+`--write-h5ad` writes `{stem}.doublet.h5ad` from the CLI. Object APIs default `output_dir=None` to a tempfile for the TSV side output.
 
 `predicted_doublet_rate = n_doublet / n_called` ([ADR 0011](docs/adr/0011-rate-denominator-is-n-called.md)). Report `n_input`, `n_scored`, `n_called` so the fraction is auditable.
 
@@ -106,7 +108,7 @@ See [ADR 0003](docs/adr/0003-single-sample-matrix-or-h5ad.md) for the Sample uni
 
 ## Runtime
 
-Mixed R + Python ([ADR 0008](docs/adr/0008-mixed-r-python.md)). The driver exports gene-by-cell Matrix Market for R, runs `detectors_r.R` and the Python Detectors, then joins on barcode.
+Mixed R + Python ([ADR 0008](docs/adr/0008-mixed-r-python.md), [ADR 0013](docs/adr/0013-dual-r-python-packages.md)). The Python package `doublet_rate` is the orchestrator for the full roster, including from R: `annotate_doublets` exports MTX, runs `python -m doublet_rate`, and reads the TSV back. That CLI exports MTX again for R Detectors, runs `detectors_r.R` plus the Python Detectors, then joins on barcode.
 
 `--n-jobs` (default `-1` = all CPUs) wires existing Detector knobs: scDblFinder `BPPARAM` (`MulticoreParam` / `SnowParam` / `SerialParam`), DoubletFinder `paramSweep(..., num.cores)`, Scrublet sklearn `NearestNeighbors(n_jobs=...)`, DoubletDetection `BoostClassifier(n_jobs=...)`. Solo training is unchanged.
 
@@ -116,12 +118,16 @@ Mixed R + Python ([ADR 0008](docs/adr/0008-mixed-r-python.md)). The driver expor
 
 | Symptom | Likely cause | Handling |
 |---|---|---|
-| `matrix does not look like raw UMI counts` | log-normalized `.X` without `layers['counts']` | Fix the h5ad; do not run |
-| `obs['batch'] has N values` | merged object | Split outside this skill |
+| `matrix does not look like raw UMI counts` | log-normalized `.X` without `layers['counts']`, or <80% approximately integer | Fix the h5ad; do not run |
+| `obs_names must be unique barcodes` | duplicate cell ids on the object | Make barcodes unique outside this tool |
+| `obs['batch'] has N values` | merged object | Split outside this tool |
+| DoubletDetection / DoubletFinder / Solo `fast:skip_gated` | `--fast` / `fast=TRUE` | Omit `--fast` to run them when n ≤ 20,000 |
+| those three `size_gate:>20000` | Sample larger than the size gate | Expected; other Detectors still run |
 | Scrublet `native_call` missing | unimodal simulated scores | MAD fallback |
 | DoubletFinder skip on Seurat 5 layers | API mismatch | Record error; other Detectors still run |
-| Solo skip | no GPU/CPU time, no scvi-tools | Expected; rate still comes from other Detectors |
+| Solo skip | no GPU/CPU time, no scvi-tools, or no doublet column after train | Expected; rate still comes from other Detectors |
 | All R Detectors skip | `Rscript` missing or R packages missing | Install via `scripts/install_r_packages.R` |
+| `python -m doublet_rate failed` from R | Python package not installed / not on `PYTHONPATH` | `pip install -e ".[full]"` from the repo |
 | Trajectory-like intermediates called doublet | OSCA 8.5 | Interpret; do not auto-remove |
 
 ## Sources
@@ -140,4 +146,4 @@ Mixed R + Python ([ADR 0008](docs/adr/0008-mixed-r-python.md)). The driver expor
 - She et al., *CSBJ* 2025. Expected rate as a removal-count knob — not used here
 - Liu et al., *Briefings in Bioinformatics* 2025. OmniDoublet (multimodal; RNA-only subset of comparisons only)
 
-Local PDFs of the 2020–2025 papers live in this repository. Do not use hashing/genotype methods from OSCA 8.4 or Demuxafy, and do not use OmniDoublet's multimodal fusion.
+Citations are the papers above. This repository does not vendor local PDFs. Do not use hashing/genotype methods from OSCA 8.4 or Demuxafy, and do not use OmniDoublet's multimodal fusion.
