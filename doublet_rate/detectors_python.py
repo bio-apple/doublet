@@ -59,6 +59,56 @@ def resolve_n_jobs(n_jobs: int = -1) -> int:
     return max(1, int(n_jobs))
 
 
+def knn_indices(
+    X,
+    k: int,
+    *,
+    metric: str = "euclidean",
+    n_jobs: int = 1,
+    random_state: int = DEFAULT_RANDOM_STATE,
+) -> np.ndarray:
+    """k neighbors per row, excluding self. pynndescent when present, else sklearn."""
+    X = np.asarray(X)
+    n = int(X.shape[0])
+    k = max(1, min(int(k), n - 1))
+    n_jobs = resolve_n_jobs(n_jobs)
+    try:
+        from pynndescent import NNDescent
+
+        index = NNDescent(
+            X,
+            n_neighbors=min(k + 1, n),
+            metric=metric,
+            n_jobs=n_jobs,
+            random_state=int(random_state),
+            low_memory=True,
+        )
+        knn = np.asarray(index.neighbor_graph[0], dtype=int)
+        return _knn_drop_self(knn, k)
+    except Exception:
+        from sklearn.neighbors import NearestNeighbors
+
+        algo = "brute" if metric == "cosine" else "auto"
+        nbrs = NearestNeighbors(
+            n_neighbors=k + 1,
+            metric=metric,
+            algorithm=algo,
+            n_jobs=n_jobs,
+        ).fit(X)
+        return _knn_drop_self(np.asarray(nbrs.kneighbors(return_distance=False), dtype=int), k)
+
+
+def _knn_drop_self(knn: np.ndarray, k: int) -> np.ndarray:
+    n = knn.shape[0]
+    if knn.shape[1] > k and np.array_equal(knn[:, 0], np.arange(n)):
+        return knn[:, 1 : k + 1]
+    out = np.empty((n, k), dtype=int)
+    for i in range(n):
+        row = knn[i][knn[i] != i]
+        out[i] = row[:k]
+    return out
+
+
 def _torch_accelerator() -> str | None:
     """CUDA (``gpu``) or Apple MPS. ``None`` if neither is present — Solo does not train on CPU."""
     try:
@@ -87,18 +137,30 @@ def run_scrublet(adata, outdir: Path, random_state: int = DEFAULT_RANDOM_STATE, 
         # expected_doublet_rate is a constructor default; it is not used to place the Call.
         import scrublet.helper_functions as hf
 
-        orig_nn = hf.NearestNeighbors
+        orig_graph = hf.get_knn_graph
 
-        def _nn(*args, **kwargs):
-            kwargs.setdefault("n_jobs", n_jobs)
-            return orig_nn(*args, **kwargs)
+        def _graph(X, k=5, dist_metric="euclidean", approx=False, return_edges=True, random_seed=0):
+            knn = knn_indices(
+                X,
+                k,
+                metric=dist_metric,
+                n_jobs=n_jobs,
+                random_state=random_seed if random_seed is not None else random_state,
+            )
+            if not return_edges:
+                return knn
+            links = set()
+            for i in range(knn.shape[0]):
+                for j in knn[i]:
+                    links.add(tuple(sorted((i, int(j)))))
+            return links, knn
 
-        hf.NearestNeighbors = _nn
+        hf.get_knn_graph = _graph
         try:
             scrub = scr.Scrublet(counts, random_state=random_state)
             scores, pred = scrub.scrub_doublets(verbose=False)
         finally:
-            hf.NearestNeighbors = orig_nn
+            hf.get_knn_graph = orig_graph
         native = None
         if pred is not None:
             native = np.where(pred, "doublet", "singlet")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 _SRC = Path(__file__).resolve().parents[1]
 if str(_SRC) not in sys.path:
@@ -14,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from doublet_rate.calls import griffiths_mad_calls, rate_from_calls
-from doublet_rate.detectors_python import DEFAULT_RANDOM_STATE, resolve_n_jobs, seed_everything
+from doublet_rate.detectors_python import DEFAULT_RANDOM_STATE, knn_indices, resolve_n_jobs, seed_everything
 from doublet_rate.run_doublet_rate import status_from_skip
 
 
@@ -55,6 +56,23 @@ def test_seed_everything_is_repeatable():
     assert not np.array_equal(a, c)
 
 
+def test_knn_indices_shape_no_self():
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(40, 6))
+    knn = knn_indices(X, k=5, n_jobs=1, random_state=42)
+    assert knn.shape == (40, 5)
+    assert not np.any(knn == np.arange(40)[:, None])
+
+
+def test_knn_indices_sklearn_fallback():
+    rng = np.random.default_rng(1)
+    X = rng.normal(size=(24, 5))
+    with patch.dict(sys.modules, {"pynndescent": None}):
+        knn = knn_indices(X, k=4, n_jobs=1, random_state=0)
+    assert knn.shape == (24, 4)
+    assert not np.any(knn == np.arange(24)[:, None])
+
+
 def test_status_from_skip():
     assert status_from_skip("no_gpu") == "skipped:no_gpu"
     assert status_from_skip("error:boom") == "failed"
@@ -93,6 +111,8 @@ if __name__ == "__main__":
     test_empty_not_singlet()
     test_resolve_n_jobs()
     test_seed_everything_is_repeatable()
+    test_knn_indices_shape_no_self()
+    test_knn_indices_sklearn_fallback()
     test_status_from_skip()
     test_run_solo_skips_without_gpu()
     print("ok")

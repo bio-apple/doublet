@@ -12,6 +12,7 @@ Encoding: UTF-8
 Depends: R (>= 4.2)
 Imports: Matrix
 Suggests:
+    BiocNeighbors,
     BiocParallel,
     DoubletFinder,
     S4Vectors,

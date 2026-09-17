@@ -59,7 +59,7 @@ python -m doublet_rate test --output-dir test_out --write-h5ad
 |---|---|
 | `--list-detectors` | Print the roster (`always` / `gated`) and exit. No Sample. Does not probe whether packages are installed |
 | `--output-dir` | Directory for TSV (and optional h5ad) outputs. Default: beside the input path; for a directory input, the parent of that directory |
-| `--n-jobs` | Workers for artificial-doublet / KNN steps. Default `-1` = all CPUs. Passed to scDblFinder `BPPARAM`, DoubletFinder `paramSweep(num.cores)`, Scrublet KNN, DoubletDetection |
+| `--n-jobs` | Workers for artificial-doublet / KNN steps. Default `-1` = all CPUs. Scrublet: pynndescent (`n_jobs`) if installed, else sklearn `NearestNeighbors(n_jobs=...)`. scDblFinder: `BPPARAM` plus BiocNeighbors `findKNN(num.threads=...)` (Annoy). DoubletFinder `paramSweep(num.cores)`. DoubletDetection `n_jobs` |
 | `--random-state` | Seed for PCA, neighbor graphs, sampling, and classifiers. Default `42`. Same value in every Detector. Python: `detect_doublets(adata, random_state=42)`. R: `annotate_doublets(x, random_state = 42)` |
 | `--write-h5ad` | Write `{stem}.doublet.h5ad` with `obs['doublet_score']`, `obs['predicted_doublet']`, `obs['is_doublet']`, plus per-Detector columns |
 | `--primary` | Detector copied into those convenience columns (default `scdblfinder`). Not a consensus. If it did not run, copy the first Detector that did |
@@ -152,7 +152,7 @@ DoubletFinder `nExp=1` is API-only. Discard the DF class column. Call from MAD o
 
 ## Dependencies
 
-Python: `pip install -e ".[full]"` (package name `rna-doublet-rate`; or `scripts/requirements.txt`). R: `R CMD INSTALL .` plus `Rscript scripts/install_r_packages.R`. The R package still needs the Python package. Missing *detector* packages skip that Detector; they do not stop the rest. Missing `python -m doublet_rate` stops the R function.
+Python: `pip install -e ".[full]"` (package name `rna-doublet-rate`; or `scripts/requirements.txt`). Includes pynndescent for Scrublet KNN. R: `R CMD INSTALL .` plus `Rscript scripts/install_r_packages.R` (BiocNeighbors for scDblFinder Annoy threads). The R package still needs the Python package. Missing *detector* packages skip that Detector; they do not stop the rest. Missing `python -m doublet_rate` stops the R function.
 
 ## Do not
 

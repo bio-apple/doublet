@@ -59,6 +59,40 @@ bpparam <- function(n_jobs) {
   }
 }
 
+# scDblFinder::.evaluateKNN calls findKNN(..., BNPARAM = AnnoyParam()) with
+# BiocNeighbors default num.threads = 1. Point that import at n_jobs.
+patch_scdblfinder_knn_threads <- function(n_jobs) {
+  n <- resolve_n_jobs(n_jobs)
+  restore <- function() invisible(NULL)
+  if (!requireNamespace("scDblFinder", quietly = TRUE) || !requireNamespace("BiocNeighbors", quietly = TRUE)) {
+    return(restore)
+  }
+  ns <- asNamespace("scDblFinder")
+  if (!exists("findKNN", envir = ns, inherits = FALSE)) {
+    return(restore)
+  }
+  orig <- get("findKNN", envir = ns)
+  wrapped <- function(X, k, ..., num.threads = n) {
+    orig(X, k, ..., num.threads = num.threads)
+  }
+  ok <- tryCatch({
+    unlockBinding("findKNN", ns)
+    assign("findKNN", wrapped, envir = ns)
+    lockBinding("findKNN", ns)
+    TRUE
+  }, error = function(e) FALSE)
+  if (!isTRUE(ok)) {
+    return(restore)
+  }
+  function() {
+    tryCatch({
+      unlockBinding("findKNN", ns)
+      assign("findKNN", orig, envir = ns)
+      lockBinding("findKNN", ns)
+    }, error = function(e) invisible(NULL))
+  }
+}
+
 write_skip <- function(outdir, name, reason) {
   writeLines(reason, file.path(outdir, paste0(name, ".skip.txt")))
 }
@@ -142,6 +176,7 @@ if (!requireNamespace("SingleCellExperiment", quietly = TRUE)) {
   if (!requireNamespace("scDblFinder", quietly = TRUE)) {
     write_skip(opt$outdir, "scdblfinder", "missing_package:scDblFinder")
   } else {
+    unpatch_knn <- patch_scdblfinder_knn_threads(opt$n_jobs)
     tryCatch({
       set.seed(opt$random_state)
       # dbr.sd=1: threshold from artificial-doublet misclassification, not Expected Doublet Rate.
@@ -155,6 +190,7 @@ if (!requireNamespace("SingleCellExperiment", quietly = TRUE)) {
         as.character(dbl$scDblFinder.class)
       )
     }, error = function(e) write_skip(opt$outdir, "scdblfinder", paste0("error:", conditionMessage(e))))
+    unpatch_knn()
   }
 
   if (!requireNamespace("scds", quietly = TRUE)) {
