@@ -41,6 +41,36 @@ write_tsv <- function(outdir, name, barcodes, score, native_call = NULL) {
   utils::write.table(df, file.path(outdir, paste0(name, ".tsv")), sep = "\t", quote = FALSE, row.names = FALSE)
 }
 
+# scds 1.22 calls xgboost(DMatrix, ...). xgboost >= 2 made xgboost() an x,y API
+# ("argument y is missing") and xgb.train errors on early_stopping_rounds without evals.
+patch_scds_xgboost <- function() {
+  if (!requireNamespace("xgboost", quietly = TRUE) || !requireNamespace("scds", quietly = TRUE)) {
+    return(invisible(FALSE))
+  }
+  imp <- parent.env(asNamespace("scds"))
+  if (!exists("xgboost", envir = imp, inherits = FALSE)) {
+    return(invisible(FALSE))
+  }
+  compat <- function(data, nrounds, ...) {
+    if (!inherits(data, "xgb.DMatrix")) {
+      return(xgboost::xgboost(x = data, nrounds = nrounds, ...))
+    }
+    dots <- list(...)
+    params <- list()
+    for (nm in c("objective", "nthread", "subsample", "tree_method")) {
+      if (!is.null(dots[[nm]])) params[[nm]] <- dots[[nm]]
+    }
+    verbose <- if (is.null(dots$verbose)) 0 else dots$verbose
+    xgboost::xgb.train(params = params, data = data, nrounds = as.integer(nrounds), verbose = verbose)
+  }
+  tryCatch({
+    unlockBinding("xgboost", imp)
+    assign("xgboost", compat, envir = imp)
+    lockBinding("xgboost", imp)
+    TRUE
+  }, error = function(e) FALSE)
+}
+
 load_counts <- function(mtx_dir) {
   mat <- Matrix::readMM(file.path(mtx_dir, "matrix.mtx"))
   barcodes <- readLines(file.path(mtx_dir, "barcodes.tsv"))
@@ -99,12 +129,14 @@ if (!requireNamespace("SingleCellExperiment", quietly = TRUE)) {
       sce_c <- scds::cxds(sce)
       write_tsv(opt$outdir, "cxds", colnames(sce_c), sce_c$cxds_score)
     }, error = function(e) write_skip(opt$outdir, "cxds", paste0("error:", conditionMessage(e))))
+    patch_scds_xgboost()
     tryCatch({
-      sce_b <- scds::bcds(sce, verb = FALSE)
+      # nmax integer skips xgb.cv "tune", which breaks on xgboost 3 evaluation_log names.
+      sce_b <- scds::bcds(sce, verb = FALSE, nmax = 100)
       write_tsv(opt$outdir, "bcds", colnames(sce_b), sce_b$bcds_score)
     }, error = function(e) write_skip(opt$outdir, "bcds", paste0("error:", conditionMessage(e))))
     tryCatch({
-      sce_h <- scds::cxds_bcds_hybrid(sce)
+      sce_h <- scds::cxds_bcds_hybrid(sce, bcdsArgs = list(nmax = 100, verb = FALSE))
       write_tsv(opt$outdir, "hybrid", colnames(sce_h), sce_h$hybrid_score)
     }, error = function(e) write_skip(opt$outdir, "hybrid", paste0("error:", conditionMessage(e))))
   }

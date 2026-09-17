@@ -27,6 +27,18 @@ def _skip(outdir: Path, name: str, reason: str) -> None:
     (outdir / f"{name}.skip.txt").write_text(reason + "\n")
 
 
+def _torch_accelerator() -> str:
+    """scvi ``auto`` still maps MPS to CPU; CUDA/MPS must be requested explicitly."""
+    import torch
+
+    if torch.cuda.is_available():
+        return "gpu"
+    mps = getattr(torch.backends, "mps", None)
+    if mps is not None and mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def run_scrublet(adata, outdir: Path, seed: int = 0) -> None:
     name = "scrublet"
     try:
@@ -58,7 +70,7 @@ def run_doubletdetection(adata, outdir: Path, seed: int = 0) -> None:
         counts = _counts_csr(adata)
         clf = doubletdetection.BoostClassifier(
             n_iters=10,
-            clustering_algorithm="louvain",
+            clustering_algorithm="leiden",
             standard_scaling=True,
             random_state=seed,
             n_jobs=1,
@@ -88,14 +100,15 @@ def run_solo(adata, outdir: Path, seed: int = 0) -> None:
         scvi.settings.seed = seed
         SCVI.setup_anndata(ad)
         vae = SCVI(ad)
-        vae.train(accelerator="cpu")
+        accelerator = _torch_accelerator()
+        vae.train(accelerator=accelerator)
         solo = SOLO.from_scvi_model(vae)
-        solo.train(accelerator="cpu")
+        solo.train(accelerator=accelerator)
         pred = solo.predict(soft=True, include_simulated_doublets=False)
-        if "doublet" in pred.columns:
-            scores = pred["doublet"].to_numpy()
-        else:
-            scores = pred.iloc[:, -1].to_numpy()
+        if "doublet" not in pred.columns:
+            _skip(outdir, name, "error:solo predict() has no 'doublet' column")
+            return
+        scores = pred["doublet"].to_numpy()
         barcodes = pred.index.astype(str) if getattr(pred, "index", None) is not None else ad.obs_names
         _write(outdir, name, barcodes, scores)
     except Exception as exc:

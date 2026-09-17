@@ -63,6 +63,34 @@ def _use_counts_layer(adata):
     return adata
 
 
+def sanitize_sparse_indices(X):
+    """Make sparse column indices fit ``X.shape``.
+
+    Some h5ad files store 1-based gene indices (``min >= 1`` and
+    ``max == n_vars``). ``mmwrite`` then fails with "index exceeds matrix
+    dimension". Shift those to 0-based; otherwise drop remaining OOB entries.
+    """
+    if not sparse.issparse(X):
+        return X
+    X = X.tocsr()
+    if X.nnz == 0:
+        return X
+    n_rows, n_cols = X.shape
+    imax = int(X.indices.max())
+    if imax < n_cols:
+        return X
+    out = X.copy()
+    if int(out.indices.min()) >= 1 and imax == n_cols:
+        out.indices = out.indices - 1
+        return out
+    keep = (out.indices >= 0) & (out.indices < n_cols)
+    rows = np.repeat(np.arange(n_rows), np.diff(out.indptr))
+    return sparse.csr_matrix(
+        (out.data[keep], (rows[keep], out.indices[keep])),
+        shape=out.shape,
+    )
+
+
 def load_sample(path: str | Path):
     import scanpy as sc
 
@@ -87,6 +115,8 @@ def load_sample(path: str | Path):
         raise InputError("empty matrix")
     adata.var_names_make_unique()
     adata.obs_names_make_unique()
+    if sparse.issparse(adata.X):
+        adata.X = sanitize_sparse_indices(adata.X)
     assert_single_sample(adata)
     assert_raw_counts(adata.X)
     return adata
