@@ -1,0 +1,9 @@
+detector	n_input	n_scored	n_called	n_doublet	predicted_doublet_rate	status	skipped_reason	call_rule
+scdblfinder	2700	2700	2700	170	0.06296296296296296	ran		native:scdblfinder-dbr.sd=1
+scrublet	2700	2700	2700	37	0.013703703703703704	ran		native:scrublet-bimodality
+cxds	2700	2700	2700	0	0.0	ran		mad-griffiths
+bcds	2700	0	0	0		skipped	"error:argument ""y"" is missing, with no default"	
+hybrid	2700	0	0	0		skipped	"error:argument ""y"" is missing, with no default"	
+doubletdetection	2700	0	0	0		skipped	error:No module named 'louvain'	
+doubletfinder	2700	2700	2700	565	0.20925925925925926	ran		mad-griffiths
+solo	2700	2700	2700	624	0.2311111111111111	ran		mad-griffiths

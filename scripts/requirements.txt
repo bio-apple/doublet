@@ -1,0 +1,7 @@
+scanpy>=1.9
+numpy
+pandas
+scipy
+scrublet
+doubletdetection
+scvi-tools
