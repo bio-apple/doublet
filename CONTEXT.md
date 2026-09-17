@@ -4,7 +4,7 @@ This file is the **glossary** for this repository. It defines the words used in 
 
 | Need | File |
 |---|---|
-| Five-minute start | [README.md](README.md) |
+| Five-minute start and user-facing overview | [README.md](README.md) |
 | How to run (CLI, output, Detector roster) | [SKILL.md](SKILL.md) |
 | Parameters, I/O, failures, citations | [reference.md](reference.md) |
 | Why a rule exists | [docs/adr/](docs/adr/) |

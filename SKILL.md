@@ -5,11 +5,11 @@ description: Runs RNA-only multi-detector doublet scoring, data-driven calls, an
 
 # RNA-only doublet rate — run contract
 
-This file is the **run contract**. CLI flags, output tables, the Detector roster, and object APIs are defined here, not in the README. The README is only the five-minute start plus a documentation index.
+This file is the **run contract**. CLI flags, output tables, the Detector roster, and object APIs are defined here. The README is the user-facing overview (features, I/O, interpretation, method guide); do not copy CLI tables back into the README.
 
 | Need | File |
 |---|---|
-| Five-minute start | [README.md](README.md) |
+| Five-minute start and user-facing overview | [README.md](README.md) |
 | Words this repo uses (Sample, Detector, Score, Call, rate) | [CONTEXT.md](CONTEXT.md) |
 | Exact thresholds, skip reasons, citations | [reference.md](reference.md) |
 | Why these rules exist | [docs/adr/](docs/adr/) |
